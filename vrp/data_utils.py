@@ -20,15 +20,15 @@ class InstanceBlueprint:
 
 
 def get_blueprint(blueprint_name):
-    type = blueprint_name.split('_')[0]
+    instance_type = blueprint_name.split('_')[0]
     instance = blueprint_name.split('_')[1]
-    if type == "ALTR":
+    if instance_type == "ALTR":
         import vrp.dataset_blueprints.ALTR
         return vrp.dataset_blueprints.ALTR.dataset[instance]
-    elif type == "XE":
+    elif instance_type == "XE":
         import vrp.dataset_blueprints.XE
         return vrp.dataset_blueprints.XE.dataset[instance]
-    elif type == "S":
+    elif instance_type == "S":
         import vrp.dataset_blueprints.S
         return vrp.dataset_blueprints.S.dataset[instance]
     raise Exception('Unknown blueprint instance')

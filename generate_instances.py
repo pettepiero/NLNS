@@ -3,6 +3,64 @@ import os
 import numpy as np
 from vrp.data_utils import generate_Instance, get_blueprint
 
+def write_mdvrplib(filename, config, name="problem"):
+    """ Generates instances of mdvrp based on 'generate_data.py' of DeepMDV repo.
+        Returns them in the same format as 'write_vrplib' below """
+
+    assert config['grid_size'] == 1000 or config['grid_size'] == 1000000
+
+    MIN_LAT = 0
+    MAX_LAT = config['grid_size']
+    MIN_LON = 0
+    MAX_LON = config['grid_size']
+
+    depot_latitudes = np.random.randint(low=MIN_LAT, high=MAX_LAT, size=config['depot_size']).tolist()
+    depot_longitudes = np.random.randint(low=MIN_LON, high=MAX_LON, size=config['depot_size']).tolist()
+    depots_coordinates = list(zip(depot_latitudes, depot_longitudes))
+
+    node_latitudes = np.random.randint(low=MIN_LAT, high=MAX_LAT, size=config['vrp_size']).tolist()
+    node_longitudes = np.random.randint(low=MIN_LON, high=MAX_LON, size=config['vrp_size']).tolist()
+    nodes_coordinates = list(zip(node_latitudes, node_longitudes))
+
+    demands = np.random.poisson(lam=1.0, size=config['vrp_size'])
+    # Replace any zeros with 1 (to avoid zero demand)
+    demands = np.where(demands == 0, 1, demands)
+    # Convert to int list if needed
+    demands = demands.tolist()
+
+
+    with open(filename, 'w+') as f:
+        f.write("\n".join([
+            "{} : {}".format(k, v)
+            for k, v in (
+                ("NAME", name),
+                ("TYPE", "MDVRP"),
+                ("DIMENSION", config['vrp_size']),
+                ("EDGE_WEIGHT_TYPE", config['dist_type']),
+                ("CAPACITY", config['capacity'])
+            )
+        ]))
+        f.write("\n")
+        f.write("NODE_COORD_SECTION\n")
+        f.write("\n".join([
+            "{}\t{}\t{}".format(i + 1, x, y)
+            for i, (x, y) in enumerate(nodes_coordinates)
+        ]))
+        f.write("\n")
+        f.write("DEMAND_SECTION\n")
+        f.write("\n".join([
+            "{}\t{}".format(i + 1, d)
+            for i, d in enumerate(demands)
+        ]))
+        f.write("\n")
+        f.write("DEPOT_SECTION\n")
+        f.write("\n".join([
+            "{}\t{}\t{}".format(i + 1, x, y)
+            for i, (x, y) in enumerate(depots_coordinates)
+        ]))
+        f.write("\n")
+        f.write("-1\n")
+        f.write("EOF\n")
 
 def write_vrplib(filename, loc, demand, capacity, grid_size, name="problem"):
     assert grid_size == 1000 or grid_size == 1000000
@@ -39,24 +97,43 @@ def write_vrplib(filename, loc, demand, capacity, grid_size, name="problem"):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("--problem", type=str, default='vrp',
+            help="Problem: 'vrp', 'mdvrp'")
     parser.add_argument("--data_dir", default='data')
     parser.add_argument('--instance_blueprint', default=None, type=str)
     parser.add_argument('--dataset_size', default=1, type=int)
     parser.add_argument('--seed', default=None, type=int)
+    parser.add_argument('--grid_size', default=1000, type=int)
+    parser.add_argument('--vrp_size', type=int) #number of customers
+    parser.add_argument('--depot_size', type=int)
+    parser.add_argument('--capacity', type=int)
+    parser.add_argument('--dist_type', type=str, default='EUC_2D')
 
     config = parser.parse_args()
-
-    assert config.instance_blueprint.startswith("XE_"), 'Only XE are supported'
 
     np.random.seed(config.seed)
     if not os.path.exists(config.data_dir):
         os.makedirs(config.data_dir)
-    blueprint = get_blueprint(config.instance_blueprint)
 
-    for i in range(config.dataset_size):
-        instance = generate_Instance(blueprint, False)
+    if config.problem == "mdvrp":
+        assert config.vrp_size, "VRP size needed in mdvrp"
+        assert config.depot_size, "Depot size needed in mdvrp"
+        assert config.capacity, "Depot size needed in mdvrp"
+        
+        for i in range(config.dataset_size):
+            name = "mdvrp_seed_{}_id_{}".format(config.seed, i)
+            filename = os.path.join(config.data_dir, name + ".mdvrp")
+            print(f"\nDEBUG: vars(config):\n{vars(config)}")
+            write_mdvrplib(filename, vars(config), name)
 
-        name = "{}_seed_{}_id_{}".format(config.instance_blueprint, config.seed, i)
-        filename = os.path.join(config.data_dir, name + ".vrp")
-        write_vrplib(filename, instance.original_locations, instance.demand, instance.capacity,
-                     blueprint.grid_size, name)
+    elif config.problem == "vrp":
+        assert config.instance_blueprint.startswith("XE_"), 'Only XE are supported'
+        blueprint = get_blueprint(config.instance_blueprint)
+
+        for i in range(config.dataset_size):
+            instance = generate_Instance(blueprint, False)
+
+            name = "{}_seed_{}_id_{}".format(config.instance_blueprint, config.seed, i)
+            filename = os.path.join(config.data_dir, name + ".vrp")
+            write_vrplib(filename, instance.original_locations, instance.demand, instance.capacity,
+                         blueprint.grid_size, name)
