@@ -66,6 +66,19 @@ class MDVRPInstance():
         order = np.argsort(distances)
         return order[:n]
 
+    def get_nearest_depot(self, loc):
+        x,y = self.locations[loc]
+        min_dist = np.inf 
+        closest_depot = None
+        for d in self.depot_indices:
+            dx, dy = self.locations[d]
+            dist = np.sqrt((dx-x)**2 + (dy-y)**2)
+            if dist < min_dist:
+                min_dist = dist
+                closest_depot = d
+
+        return closest_depot 
+
     def create_initial_solution(self):
         """Create an initial solution for this instance using a greedy heuristic."""
 
@@ -74,34 +87,17 @@ class MDVRPInstance():
         for depot in self.depot_indices:
             depot_to_customer[depot] = []
         
-        depot_locations = self.locations[self.depot_indices]
-
-        def get_nearest_depot(loc):
-            x,y = loc
-            min_dist = 1000000000
-            closest_depot = None
-            for d in depot_locations:
-                dx, dy = d
-                dist = np.sqrt((dx-x)**2 + (dy-y)**2)
-                if dist < min_dist:
-                    min_dist = dist
-                    closest_depot = d
-            return d
-
-        for idx, loc in enumerate(self.locations):
+        for idx, _ in enumerate(self.locations):
             if idx in self.depot_indices:
                 continue 
-            nearest_depot = get_nearest_depot(loc)
+            nearest_depot = self.get_nearest_depot(idx)
             depot_to_customer[nearest_depot].append(idx)
 
-        print(f"\nDEBUG:\n")
-        print(f"depot_to_customers:\n {depot_to_customers}")
-        
         # 2 do normal NLNS VRP greedy solution inside each cluster
         # use mask to only see some customers
         self.solution = []
         for input_idx, depot in enumerate(self.depot_indices):
-            available_customers = depot_to_customers[depot]
+            available_customers = depot_to_customer[depot]
 
             self.solution.append([[depot, 0, input_idx]]) # one for depot only
             self.solution.append([[depot, 0, input_idx]]) # one to start route
