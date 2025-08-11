@@ -65,7 +65,38 @@ class MDVRP_instance_test(unittest.TestCase):
             known_sol = customer_to_depot_known[cust]
             self.assertEqual(result, known_sol)
 
+    def test_get_n_closest_locations_to(self):
+        # some hand made examples:
+        closest_locs = {
+                18: 13,
+                20: 10,
+                16: 17,
+                12: 8,
+                5: 20,
+                }
+        for loc in iter(closest_locs):
+            known_sol = closest_locs[loc]
+            mask = np.array([True] * (self.mdvrp_instance.nb_customers + self.mdvrp_instance.n_depots))
+            mask[loc] = False
+            mask[self.mdvrp_instance.depot_indices] = False
+            result = self.mdvrp_instance.get_n_closest_locations_to(loc, mask, 1)[0] # testing first element only for now
+            self.assertEqual(result, known_sol, msg=f"Failed on customer {loc}")
+
+
     def test_create_initial_solution(self):
         self.mdvrp_instance.create_initial_solution()
         sol = self.mdvrp_instance.solution
+        known_solution = [
+                [[0, 0, 0]],
+                [[0, 0, 0], [8, 1, None], [12, 9, None], [4, 1, None], [15, 1, None], [0, 0, 0]],
+                [[1, 0, 1]],
+                [[1, 0, 1], [19, 3, None], [16, 4, None], [17, 9, None], [7, 6, None], [20, 9, None], [5, 5, None], [1, 0, 1]],
+                [[2, 0, 2]],
+                [[2, 0, 2], [6, 6, None], [11, 9, None], [14, 5, None], [9, 2, None], [10, 2, None], [2, 0, 2]],
+                [[3, 0, 3]],
+                [[3, 0, 3], [18, 3, None], [13, 3, None], [3, 0, 3]]]
+        
+        self.assertEqual(len(sol), len(known_solution))
+
+        self.assertEqual(sol, known_solution)
 

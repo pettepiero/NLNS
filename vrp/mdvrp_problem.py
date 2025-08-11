@@ -14,6 +14,8 @@ class MDVRPInstance():
         Number of depots
     depot_indices: list
         List of depot indices
+    customer_indices: list
+        List of customer indices
     locations: np.ndarray
         Coordinates of all locations in the interval [0, 1]
     original_locations: np.ndarray
@@ -36,8 +38,9 @@ class MDVRPInstance():
         self.nb_customers = len(locations)-len(depot_indices)
         assert self.nb_customers > 0, f"Error in nb_customers"
         self.depot_indices = depot_indices
-        assert len(self.depot_indices) > 0, f"Insufficient depots"
         self.n_depots = len(self.depot_indices)
+        assert len(self.depot_indices) > 0, f"Insufficient depots"
+        self.customer_indices = [i for i in range(self.nb_customers + self.n_depots) if i not in self.depot_indices]
         self.locations = locations  # coordinates of all locations in the interval [0, 1]
         self.original_locations = original_locations  # original coordinates of locations (used to compute objective
         # value)
@@ -55,16 +58,34 @@ class MDVRPInstance():
         self.open_nn_input_idx = None  # List of idx of those nn_inputs that have not been visited
         self.incomplete_tours = None  # List of incomplete tours of self.solution
         if use_cost_memory:
-            self.costs_memory = np.full((self.nb_customers + 1, self.nb_customers + 1), np.nan, dtype="float")
+            self.costs_memory = np.full((self.nb_customers + self.n_depots, self.nb_customers + self.n_depots), np.nan, dtype="float")
         else:
             self.costs_memory = None
 
+    #def get_n_closest_locations_to(self, origin_location_id, mask, n):
+        #"""Return the idx of the n closest locations sorted by distance."""
+        #distances = np.array([np.inf] * len(mask))
+        #distances[mask] = ((self.locations[mask] * self.locations[origin_location_id]) ** 2).sum(1)
+        #order = np.argsort(distances)
+        #return order[:n]
+
     def get_n_closest_locations_to(self, origin_location_id, mask, n):
-        """Return the idx of the n closest locations sorted by distance."""
-        distances = np.array([np.inf] * len(mask))
-        distances[mask] = ((self.locations[mask] * self.locations[origin_location_id]) ** 2).sum(1)
-        order = np.argsort(distances)
-        return order[:n]
+        """Return the idx of the n closest locations (Euclidean) sorted by distance."""
+        locs = self.locations
+        idxs = np.flatnonzero(mask)                       
+        if idxs.size == 0:
+            return np.array([], dtype=int)
+    
+        origin = locs[origin_location_id]
+        diffs = locs[idxs] - origin
+        dists = np.linalg.norm(diffs, axis=1) 
+    
+        # Take the n smallest distances among the masked indices
+        take = min(n, idxs.size)
+        nearest_masked_order = np.argsort(dists)[:take]   # positions within idxs
+        return idxs[nearest_masked_order]                 # original indices into self.locations
+
+
 
     def get_nearest_depot(self, loc):
         x,y = self.locations[loc]
@@ -104,7 +125,7 @@ class MDVRPInstance():
             cur_load = self.capacity
             mask = np.array([False] * (self.nb_customers + self.n_depots))
             # enable only current depot and current available customers
-            mask[depot] = True
+            mask[depot] = False 
             mask[available_customers] = True
 
             while mask.any():
@@ -123,10 +144,11 @@ class MDVRPInstance():
         """Return the cost of the current complete solution. Uses a memory to improve performance."""
         c = 0
         for t in self.solution:
-            if t[0][0] != 0 or t[-1][0] != 0:
+            #check that first position element of tour t starts at a depot
+            if t[0][0] not in self.depot_indices or t[-1][0] not in self.depot_indices:
                 raise Exception("Incomplete solution.")
             for i in range(0, len(t) - 1):
-                from_idx = t[i][0]
+                from_idx = t[i][0] 
                 to_idx = t[i + 1][0]
                 if np.isnan(self.costs_memory[from_idx, to_idx]):
                     cc = np.sqrt((self.original_locations[from_idx, 0] - self.original_locations[to_idx, 0]) ** 2
@@ -143,7 +165,7 @@ class MDVRPInstance():
         """Return the cost of the current complete solution."""
         c = 0
         for t in self.solution:
-            if t[0][0] != 0 or t[-1][0] != 0:
+            if t[0][0] not in self.depot_indices or t[-1][0] not in self.depot_indices:
                 raise Exception("Incomplete solution.")
             for i in range(0, len(t) - 1):
                 cc = np.sqrt((self.original_locations[t[i][0], 0] - self.original_locations[t[i + 1][0], 0]) ** 2
@@ -211,8 +233,11 @@ class MDVRPInstance():
 
     def destroy_random(self, p):
         """Random destroy. Select customers that should be removed at random and remove them from tours."""
-        customers_to_remove_idx = np.random.choice(range(1, self.nb_customers + 1), int(self.nb_customers * p),
-                                                   replace=False)
+        #customers_to_remove_idx = np.random.choice(range(1, self.nb_customers + 1), int(self.nb_customers * p),
+        customers_to_remove_idx = np.random.Generator.choice(
+                a=self.customer_indices,
+                size=int(self.nb_customers * p), # degree of destruction
+                replace=False)
         self.destroy(customers_to_remove_idx)
 
     def destroy_point_based(self, p):
@@ -282,20 +307,20 @@ class MDVRPInstance():
     def _get_incomplete_tours(self):
         incomplete_tours = []
         for tour in self.solution:
-            if tour[0][0] != 0 or tour[-1][0] != 0:
+            if tour[0][0]  not in self.depot_indices or tour[-1][0] not in self.depot_indices:
                 incomplete_tours.append(tour)
         return incomplete_tours
 
     def get_max_nb_input_points(self):
         incomplete_tours = self.incomplete_tours
-        nb = 1  # input point for the depot
+        nb = self.n_depots  # input point for each depot
         for tour in incomplete_tours:
             if len(tour) == 1:
                 nb += 1
             else:
-                if tour[0][0] != 0:
+                if tour[0][0] not in self.depot_indices:
                     nb += 1
-                if tour[-1][0] != 0:
+                if tour[-1][0] not in self.depot_indices:
                     nb += 1
         return nb
 
