@@ -114,14 +114,16 @@ class MDVRPInstance():
             nearest_depot = self.get_nearest_depot(idx)
             depot_to_customer[nearest_depot].append(idx)
 
+        self.solution = []
+        for input_idx, depot in enumerate(self.depot_indices):
+            self.solution.append([[depot, 0, input_idx]]) # for depot only
+
         # 2 do normal NLNS VRP greedy solution inside each cluster
         # use mask to only see some customers
-        self.solution = []
         for input_idx, depot in enumerate(self.depot_indices):
             available_customers = depot_to_customer[depot]
 
-            self.solution.append([[depot, 0, input_idx]]) # one for depot only
-            self.solution.append([[depot, 0, input_idx]]) # one to start route
+            self.solution.append([[depot, 0, input_idx]]) # to start route
             cur_load = self.capacity
             mask = np.array([False] * (self.nb_customers + self.n_depots))
             # enable only current depot and current available customers
@@ -239,12 +241,15 @@ class MDVRPInstance():
                 #replace=False)
         self.destroy(customers_to_remove_idx)
 
-    def destroy_point_based(self, p, point=None):
+    def destroy_point_based(self, p, point=None, rng=None):
         """Point based destroy. Select customers that should be removed based on their distance to a random point
          and remove them from tours."""
         nb_customers_to_remove = int(self.nb_customers * p)
         if point is None:
-            random_point = np.random.rand(1, 2)
+            if rng is None:
+                random_point = np.random.rand(1, 2)
+            else:
+                random_point = rng.random((1,2))
         else:
             random_point = point
         customer_locations = self.locations[self.customer_indices]
@@ -340,52 +345,58 @@ class MDVRPInstance():
 
         """
         nn_input = np.zeros((input_size, 4))
-        nn_input[0, :2] = self.locations[0]  # Depot location
-        nn_input[0, 2] = -1 * self.capacity  # Depot demand
-        nn_input[0, 3] = -1  # Depot state
+        nn_input[:self.n_depots, :2] = self.locations[self.depot_indices]
+        nn_input[:self.n_depots, 2] = -1 * self.capacity  # Depots demand
+        nn_input[:self.n_depots, 3] = -1  # Depots state
+
+        #nn_input[0, :2] = self.locations[0]  # Depot location
+        #nn_input[0, 2] = -1 * self.capacity  # Depot demand
+        #nn_input[0, 3] = -1  # Depot state
         network_input_idx_to_tour = [None] * input_size
-        network_input_idx_to_tour[0] = [self.solution[0], 0]
-        i = 1
+        for d in range(self.n_depots): 
+            network_input_idx_to_tour[d] = [self.solution[d], 0] #IMPORTANT: first part of solution have to be depots!!
+        i = self.n_depots 
         destroyed_location_idx = []
 
         incomplete_tours = self.incomplete_tours
         for tour in incomplete_tours:
             # Create an input for a tour consisting of a single customer
             if len(tour) == 1:
-                nn_input[i, :2] = self.locations[tour[0][0]]
-                nn_input[i, 2] = tour[0][1]
-                nn_input[i, 3] = 1
-                tour[0][2] = i
+                nn_input[i, :2] = self.locations[tour[0][0]] #coordinates of customer
+                nn_input[i, 2] = tour[0][1] # demand of customer
+                nn_input[i, 3] = 1 #encoding of single customer route
+                tour[0][2] = i # save network input index information in incomplete_tours
                 network_input_idx_to_tour[i] = [tour, 0]
                 destroyed_location_idx.append(tour[0][0])
                 i += 1
             else:
                 # Create an input for the first location in an incomplete tour if the location is not the depot
-                if tour[0][0] != 0:
+                if tour[0][0] not in self.depot_indices:
                     nn_input[i, :2] = self.locations[tour[0][0]]
                     nn_input[i, 2] = sum(l[1] for l in tour)
                     network_input_idx_to_tour[i] = [tour, 0]
-                    if tour[-1][0] == 0:
+                    if tour[-1][0] in self.depot_indices: # if route contains (i.e. ends at) a depot
                         nn_input[i, 3] = 3
                     else:
                         nn_input[i, 3] = 2
-                    tour[0][2] = i
+                    tour[0][2] = i # save network input index information in incomplete_tours
                     destroyed_location_idx.append(tour[0][0])
                     i += 1
                 # Create an input for the last location in an incomplete tour if the location is not the depot
-                if tour[-1][0] != 0:
+                if tour[-1][0] not in self.depot_indices:
                     nn_input[i, :2] = self.locations[tour[-1][0]]
                     nn_input[i, 2] = sum(l[1] for l in tour)
                     network_input_idx_to_tour[i] = [tour, len(tour) - 1]
                     tour[-1][2] = i
-                    if tour[0][0] == 0:
+                    if tour[0][0] in self.depot_indices:
                         nn_input[i, 3] = 3
                     else:
                         nn_input[i, 3] = 2
                     destroyed_location_idx.append(tour[-1][0])
                     i += 1
-
-        self.open_nn_input_idx = list(range(1, i))
+        #HERE#######################################À
+        #self.open_nn_input_idx = list(range(1, i))
+        self.open_nn_input_idx = list(range(self.n_depots, i))
         self.nn_input_idx_to_tour = network_input_idx_to_tour
         return nn_input[:, :2], nn_input[:, 2:]
 

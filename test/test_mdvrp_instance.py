@@ -1,6 +1,7 @@
 import unittest
 import numpy as np
 from vrp.mdvrp_problem import MDVRPInstance
+from search import destroy_instances
 
 class MDVRP_instance_test(unittest.TestCase):
     """ Tests based on the instance generated in setUp() method.
@@ -89,16 +90,15 @@ class MDVRP_instance_test(unittest.TestCase):
         sol = self.mdvrp_instance.solution
         known_solution = [
                 [[0, 0, 0]],
-                [[0, 0, 0], [8, 1, None], [12, 9, None], [4, 1, None], [15, 1, None], [0, 0, 0]],
                 [[1, 0, 1]],
-                [[1, 0, 1], [19, 3, None], [16, 4, None], [17, 9, None], [7, 6, None], [20, 9, None], [5, 5, None], [1, 0, 1]],
                 [[2, 0, 2]],
-                [[2, 0, 2], [6, 6, None], [11, 9, None], [14, 5, None], [9, 2, None], [10, 2, None], [2, 0, 2]],
                 [[3, 0, 3]],
+                [[0, 0, 0], [8, 1, None], [12, 9, None], [4, 1, None], [15, 1, None], [0, 0, 0]],
+                [[1, 0, 1], [19, 3, None], [16, 4, None], [17, 9, None], [7, 6, None], [20, 9, None], [5, 5, None], [1, 0, 1]],
+                [[2, 0, 2], [6, 6, None], [11, 9, None], [14, 5, None], [9, 2, None], [10, 2, None], [2, 0, 2]],
                 [[3, 0, 3], [18, 3, None], [13, 3, None], [3, 0, 3]]]
         
         self.assertEqual(len(sol), len(known_solution))
-
         self.assertEqual(sol, known_solution)
 
     def test_destroy(self):
@@ -180,16 +180,16 @@ class MDVRP_instance_test(unittest.TestCase):
         # hand made incomplete solutions instances:
         solution = [
                 [[0, 0, 0]], #depot 0
+                [[1, 0, 1]], #depot 1
+                [[2, 0, 2]], #depot 2
+                [[3, 0, 3]], #depot 3
                 [[0, 0, 0], [12, 2, None], [6, 1, None]], #non_depot_tour_end 1 
                 [[11, 1, None]], #non_depot_tour_end 2 
                 [[7, 2, None], [15, 2, None], [0, 0, 0]], #non_depot_tour_end 3 
-                [[1, 0, 1]], #depot 1
                 [[1, 0, 1], [5, 2, None], [8, 1, None], [1, 0, 1]],
-                [[2, 0, 2]], #depot 2
                 [[2, 0, 2], [18, 2, None], [16, 1, None], [19, 2, None]], #non_depot_tour_end 4 
                 [[10, 1, None]], #non_depot_tour_end 5 
-                [[17, 2, None], [16, 2, None], [2, 0, 2]], #non_depot_tour_end 6 
-                [[3, 0, 3]]] #depot 3
+                [[17, 2, None], [16, 2, None], [2, 0, 2]]] #non_depot_tour_end 6 
 
         # hard code incomplete solutions instances:
         incomplete_tours = [
@@ -212,16 +212,16 @@ class MDVRP_instance_test(unittest.TestCase):
         # hand made incomplete solutions instances:
         solution = [
                 [[0, 0, 0]], #depot 0
+                [[1, 0, 1]], #depot 1
+                [[2, 0, 2]], #depot 2
+                [[3, 0, 3]], #depot 3
                 [[0, 0, 0], [12, 2, None], [6, 1, None]], #non_depot_tour_end 1 
                 [[11, 1, None]], #non_depot_tour_end 2 
                 [[7, 2, None], [15, 2, None], [0, 0, 0]], #non_depot_tour_end 3 
-                [[1, 0, 1]], #depot 1
                 [[1, 0, 1], [5, 2, None], [8, 1, None], [1, 0, 1]],
-                [[2, 0, 2]], #depot 2
                 [[2, 0, 2], [18, 2, None], [16, 1, None], [19, 2, None]], #non_depot_tour_end 4 
                 [[10, 1, None]], #non_depot_tour_end 5 
                 [[17, 2, None], [16, 2, None], [2, 0, 2]], #non_depot_tour_end 6 
-                [[3, 0, 3]], #depot 3
                 [[3, 0, 3], [18, 2, None], [16, 1, None], [19, 2, None]], #non_depot_tour_end 7 
                 [[10, 1, None]], #non_depot_tour_end 8 
                 [[17, 2, None], [16, 2, None], [3, 0, 3]]] #non_depot_tour_end 9
@@ -247,3 +247,41 @@ class MDVRP_instance_test(unittest.TestCase):
         max_nb_input_points = self.mdvrp_instance.get_max_nb_input_points()
         self.assertEqual(max_nb_input_points, known_max_nb_input_points) 
 
+    def test_get_network_input(self):
+        mdvrp = self.mdvrp_instance
+        mdvrp.create_initial_solution()
+        rng = np.random.default_rng(12345)
+        mdvrp.destroy_point_based(p=0.3, rng=rng)
+        incomplete_tours = mdvrp.incomplete_tours
+        input_dim = mdvrp.get_max_nb_input_points()
+
+        nn_input_static, nn_input_dynamic = mdvrp.get_network_input(input_dim)
+        nn_input = np.concat((nn_input_static, nn_input_dynamic), axis=1)
+       
+        for idx, v in enumerate(nn_input):
+            if idx < mdvrp.n_depots: # testing inputs corresponding to depots
+                self.assertEqual(v[0], mdvrp.locations[mdvrp.depot_indices[idx]][0]) #depot coordinates
+                self.assertEqual(v[1], mdvrp.locations[mdvrp.depot_indices[idx]][1]) #depot coordinates
+                self.assertEqual(-v[2], mdvrp.capacity) #vehicle capacity
+                self.assertEqual(v[3], -1) #depot encoding = -1 
+            else:
+                tour, i = mdvrp.nn_input_idx_to_tour[idx]
+                customer = tour[i][0]
+                if len(tour)>1:
+                    sum_demands = sum([c[1] for c in tour])
+                    self.assertEqual(v[0], mdvrp.locations[customer][0]) #customer coordinates
+                    self.assertEqual(v[1], mdvrp.locations[customer][1]) #customer coordinates
+                    self.assertEqual(v[2], sum_demands) #sum of fulfilled demands
+                    if tour[-1][0] in mdvrp.depot_indices:
+                        self.assertEqual(v[3], 3) #encoding
+                    else:
+                        self.assertEqual(v[3], 2) #encoding
+                else:
+                    demand = tour[0][1]
+                    self.assertEqual(v[0], mdvrp.locations[customer][0]) #customer coordinates
+                    self.assertEqual(v[1], mdvrp.locations[customer][1]) #customer coordinates
+                    self.assertEqual(v[2], demand) #sum of fulfilled demands
+                    self.assertEqual(v[3], 1) #encoding
+                    
+                
+        
