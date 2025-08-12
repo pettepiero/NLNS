@@ -2,8 +2,9 @@ import unittest
 import numpy as np
 from vrp.mdvrp_problem import MDVRPInstance
 
-
 class MDVRP_instance_test(unittest.TestCase):
+    """ Tests based on the instance generated in setUp() method.
+        Hand written numbers, see also `locations.ods` file as a reference """
     def setUp(self):
         self.depot_indices = [0, 1, 2, 3]
         self.locations = np.array([[0.53133224, 0.28243662],
@@ -99,4 +100,150 @@ class MDVRP_instance_test(unittest.TestCase):
         self.assertEqual(len(sol), len(known_solution))
 
         self.assertEqual(sol, known_solution)
+
+    def test_destroy(self):
+        self.mdvrp_instance.create_initial_solution()
+        customers_to_remove = [4, 5, 14, 19, 6, 15, 17, 18]
+        self.mdvrp_instance.destroy(customers_to_remove)
+        sol = self.mdvrp_instance.solution
+        incomplete_tours = self.mdvrp_instance.incomplete_tours
+
+        self.assertIn(member=[[4, 1, None]], container=sol)
+        self.assertIn(member=[[5, 5, None]], container=sol)
+        self.assertIn(member=[[14, 5, None]], container=sol)
+        self.assertIn(member=[[19, 3, None]], container=sol)
+        self.assertIn(member=[[6, 6, None]], container=sol)
+        self.assertIn(member=[[15, 1, None]], container=sol)
+        self.assertIn(member=[[17, 9, None]], container=sol)
+        self.assertIn(member=[[18, 3, None]], container=sol)
+
+        # test if inserted in incomplete solution too
+        self.assertIn(member=[[4, 1, None]], container=incomplete_tours)
+        self.assertIn(member=[[5, 5, None]], container=incomplete_tours)
+        self.assertIn(member=[[14, 5, None]], container=incomplete_tours)
+        self.assertIn(member=[[19, 3, None]], container=incomplete_tours)
+        self.assertIn(member=[[6, 6, None]], container=incomplete_tours)
+        self.assertIn(member=[[15, 1, None]], container=incomplete_tours)
+        self.assertIn(member=[[17, 9, None]], container=incomplete_tours)
+        self.assertIn(member=[[18, 3, None]], container=incomplete_tours)
+
+    def test_destroy_point_based(self):
+        self.mdvrp_instance.create_initial_solution()
+
+        point = np.array([[0.14365113, 0.5307886 ]])
+        p = 0.1
+        self.mdvrp_instance.destroy_point_based(p=p, point=point)
+        sol = self.mdvrp_instance.solution
+        incomplete_tours = self.mdvrp_instance.incomplete_tours
+        self.assertIn(member=[[10, 2, None]], container=sol)
+        self.assertIn(member=[[10, 2, None]], container=incomplete_tours)
+
+        point = np.array([[0.36975687, 0.91092584]])
+        p = 0.1
+        self.mdvrp_instance.destroy_point_based(p=p, point=point)
+        sol = self.mdvrp_instance.solution
+        incomplete_tours = self.mdvrp_instance.incomplete_tours
+        self.assertIn(member=[[20, 9, None]], container=sol)
+        self.assertIn(member=[[20, 9, None]], container=incomplete_tours)
+
+        point = np.array([[0.79329399, 0.1709594 ]])
+        p = 0.1
+        self.mdvrp_instance.destroy_point_based(p=p, point=point)
+        sol = self.mdvrp_instance.solution
+        incomplete_tours = self.mdvrp_instance.incomplete_tours
+        self.assertIn(member=[[13, 3, None]], container=sol)
+        self.assertIn(member=[[13, 3, None]], container=incomplete_tours)
+
+    def test_get_incomplete_tours(self):
+        self.mdvrp_instance.create_initial_solution()
+        incomplete_tours = self.mdvrp_instance.incomplete_tours
+        self.assertEqual(incomplete_tours, None)
+
+        customers_to_remove = [4, 5, 14, 19, 6, 15, 17, 18]
+        self.mdvrp_instance.destroy(customers_to_remove)
+        sol = self.mdvrp_instance.solution
+        incomplete_tours = self.mdvrp_instance.incomplete_tours
+
+        # test after destroy (code from test_destroy)
+        self.assertIn(member=[[4, 1, None]], container=incomplete_tours)
+        self.assertIn(member=[[5, 5, None]], container=incomplete_tours)
+        self.assertIn(member=[[14, 5, None]], container=incomplete_tours)
+        self.assertIn(member=[[19, 3, None]], container=incomplete_tours)
+        self.assertIn(member=[[6, 6, None]], container=incomplete_tours)
+        self.assertIn(member=[[15, 1, None]], container=incomplete_tours)
+        self.assertIn(member=[[17, 9, None]], container=incomplete_tours)
+        self.assertIn(member=[[18, 3, None]], container=incomplete_tours)
+
+    def test_get_max_nb_input_points(self):
+        self.mdvrp_instance.create_initial_solution()
+
+        # hand made incomplete solutions instances:
+        solution = [
+                [[0, 0, 0]], #depot 0
+                [[0, 0, 0], [12, 2, None], [6, 1, None]], #non_depot_tour_end 1 
+                [[11, 1, None]], #non_depot_tour_end 2 
+                [[7, 2, None], [15, 2, None], [0, 0, 0]], #non_depot_tour_end 3 
+                [[1, 0, 1]], #depot 1
+                [[1, 0, 1], [5, 2, None], [8, 1, None], [1, 0, 1]],
+                [[2, 0, 2]], #depot 2
+                [[2, 0, 2], [18, 2, None], [16, 1, None], [19, 2, None]], #non_depot_tour_end 4 
+                [[10, 1, None]], #non_depot_tour_end 5 
+                [[17, 2, None], [16, 2, None], [2, 0, 2]], #non_depot_tour_end 6 
+                [[3, 0, 3]]] #depot 3
+
+        # hard code incomplete solutions instances:
+        incomplete_tours = [
+                [[0, 0, 0], [12, 2, None], [6, 1, None]], #non_depot_tour_end 1 
+                [[11, 1, None]], #non_depot_tour_end 2 
+                [[7, 2, None], [15, 2, None], [0, 0, 0]], #non_depot_tour_end 3 
+                [[2, 0, 2], [18, 2, None], [16, 1, None], [19, 2, None]], #non_depot_tour_end 4 
+                [[10, 1, None]], #non_depot_tour_end 5 
+                [[17, 2, None], [16, 2, None], [2, 0, 2]]] #non_depot_tour_end 6 
+
+        self.mdvrp_instance.solution = solution 
+        self.mdvrp_instance.incomplete_tours = incomplete_tours 
+        n_depots = self.mdvrp_instance.n_depots 
+        self.assertEqual(n_depots, 4) #debug
+        non_depot_tour_ends = 6 #see comments above
+        known_max_nb_input_points = n_depots + non_depot_tour_ends
+        max_nb_input_points = self.mdvrp_instance.get_max_nb_input_points()
+        self.assertEqual(max_nb_input_points, known_max_nb_input_points) 
+
+        # hand made incomplete solutions instances:
+        solution = [
+                [[0, 0, 0]], #depot 0
+                [[0, 0, 0], [12, 2, None], [6, 1, None]], #non_depot_tour_end 1 
+                [[11, 1, None]], #non_depot_tour_end 2 
+                [[7, 2, None], [15, 2, None], [0, 0, 0]], #non_depot_tour_end 3 
+                [[1, 0, 1]], #depot 1
+                [[1, 0, 1], [5, 2, None], [8, 1, None], [1, 0, 1]],
+                [[2, 0, 2]], #depot 2
+                [[2, 0, 2], [18, 2, None], [16, 1, None], [19, 2, None]], #non_depot_tour_end 4 
+                [[10, 1, None]], #non_depot_tour_end 5 
+                [[17, 2, None], [16, 2, None], [2, 0, 2]], #non_depot_tour_end 6 
+                [[3, 0, 3]], #depot 3
+                [[3, 0, 3], [18, 2, None], [16, 1, None], [19, 2, None]], #non_depot_tour_end 7 
+                [[10, 1, None]], #non_depot_tour_end 8 
+                [[17, 2, None], [16, 2, None], [3, 0, 3]]] #non_depot_tour_end 9
+
+        # hard code incomplete solutions instances:
+        incomplete_tours = [
+                [[0, 0, 0], [12, 2, None], [6, 1, None]], #non_depot_tour_end 1 
+                [[11, 1, None]], #non_depot_tour_end 2 
+                [[7, 2, None], [15, 2, None], [0, 0, 0]], #non_depot_tour_end 3 
+                [[2, 0, 2], [18, 2, None], [16, 1, None], [19, 2, None]], #non_depot_tour_end 4 
+                [[10, 1, None]], #non_depot_tour_end 5 
+                [[17, 2, None], [16, 2, None], [2, 0, 2]], #non_depot_tour_end 6 
+                [[3, 0, 3], [18, 2, None], [16, 1, None], [19, 2, None]], #non_depot_tour_end 7 
+                [[10, 1, None]], #non_depot_tour_end 8 
+                [[17, 2, None], [16, 2, None], [3, 0, 3]]] #non_depot_tour_end 9
+
+        self.mdvrp_instance.solution = solution 
+        self.mdvrp_instance.incomplete_tours = incomplete_tours 
+        n_depots = self.mdvrp_instance.n_depots 
+        self.assertEqual(n_depots, 4) #debug
+        non_depot_tour_ends = 9 #see comments above
+        known_max_nb_input_points = n_depots + non_depot_tour_ends
+        max_nb_input_points = self.mdvrp_instance.get_max_nb_input_points()
+        self.assertEqual(max_nb_input_points, known_max_nb_input_points) 
 

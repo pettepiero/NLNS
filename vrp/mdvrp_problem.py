@@ -233,25 +233,28 @@ class MDVRPInstance():
 
     def destroy_random(self, p):
         """Random destroy. Select customers that should be removed at random and remove them from tours."""
-        #customers_to_remove_idx = np.random.choice(range(1, self.nb_customers + 1), int(self.nb_customers * p),
-        customers_to_remove_idx = np.random.Generator.choice(
-                a=self.customer_indices,
-                size=int(self.nb_customers * p), # degree of destruction
-                replace=False)
+        customers_to_remove_idx = np.random.choice(range(1, self.nb_customers + 1), int(self.nb_customers * p), replace=True)
+                #a=self.customer_indices,
+                #size=int(self.nb_customers * p), # degree of destruction
+                #replace=False)
         self.destroy(customers_to_remove_idx)
 
-    def destroy_point_based(self, p):
+    def destroy_point_based(self, p, point=None):
         """Point based destroy. Select customers that should be removed based on their distance to a random point
          and remove them from tours."""
         nb_customers_to_remove = int(self.nb_customers * p)
-        random_point = np.random.rand(1, 2)
-        dist = np.sum((self.locations[1:] - random_point) ** 2, axis=1)
-        closest_customers_idx = np.argsort(dist)[:nb_customers_to_remove] + 1
+        if point is None:
+            random_point = np.random.rand(1, 2)
+        else:
+            random_point = point
+        customer_locations = self.locations[self.customer_indices]
+        #dist = np.sum((self.locations[1:] - random_point) ** 2, axis=1) 
+        dist = np.sum((customer_locations - random_point) ** 2, axis=1) #squared euclidian distance
+        closest_customers_idx = np.argsort(dist)[:nb_customers_to_remove] + self.n_depots 
         self.destroy(closest_customers_idx)
 
     def destroy_tour_based(self, p):
         """Tour based destroy. Remove all tours closest to a randomly selected point from a solution."""
-
         # Make a dictionary that maps customers to tours
         customer_to_tour = {}
         for i, tour in enumerate(self.solution[1:]):
@@ -312,6 +315,8 @@ class MDVRPInstance():
         return incomplete_tours
 
     def get_max_nb_input_points(self):
+        """For the current instance, returns the number of input vectors required to describe the
+        incomplete solution. """
         incomplete_tours = self.incomplete_tours
         nb = self.n_depots  # input point for each depot
         for tour in incomplete_tours:
