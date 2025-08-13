@@ -1,7 +1,6 @@
 import numpy as np
 import torch
 
-
 class VRPInstance():
     def __init__(self, nb_customers, locations, original_locations, demand, capacity, use_cost_memory=True):
         self.nb_customers = nb_customers

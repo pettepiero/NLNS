@@ -394,8 +394,7 @@ class MDVRPInstance():
                         nn_input[i, 3] = 2
                     destroyed_location_idx.append(tour[-1][0])
                     i += 1
-        #HERE#######################################À
-        #self.open_nn_input_idx = list(range(1, i))
+
         self.open_nn_input_idx = list(range(self.n_depots, i))
         self.nn_input_idx_to_tour = network_input_idx_to_tour
         return nn_input[:, :2], nn_input[:, 2:]
@@ -412,19 +411,19 @@ class MDVRPInstance():
         nn_input_update = []
         # Tour with a single location
         if len(tour) == 1:
-            if tour[0][0] != 0:
+            if tour[0][0] not in self.depot_indices:
                 nn_input_update.append([nn_input_idx_end, new_demand, 1])
                 self.nn_input_idx_to_tour[nn_input_idx_end] = [tour, 0]
         else:
             # Tour contains the depot
-            if tour[0][0] == 0 or tour[-1][0] == 0:
+            if tour[0][0] in self.depot_indices or tour[-1][0] in self.depot_indices:
                 # First location in the tour is not the depot
-                if tour[0][0] != 0:
+                if tour[0][0] not in self.depot_indices:
                     nn_input_update.append([nn_input_idx_start, new_demand, 3])
                     # update first location
                     self.nn_input_idx_to_tour[nn_input_idx_start] = [tour, 0]
                 # Last location in the tour is not the depot
-                elif tour[-1][0] != 0:
+                elif tour[-1][0] in self.depot_indices:
                     nn_input_update.append([nn_input_idx_end, new_demand, 3])
                     # update last location
                     self.nn_input_idx_to_tour[nn_input_idx_end] = [tour, len(tour) - 1]
@@ -495,27 +494,31 @@ class MDVRPInstance():
                 tour_from.extend(tour_to)
                 self.solution.remove(tour_to)
                 # Generate input update
+                print(f"\nDEBUG: before nn_input_update: {nn_input_update}")
                 nn_input_update.extend(self._get_network_input_update_for_tour(tour_from, combined_demand))
+                print(f"\nDEBUG: tour_from: {tour_from}")
+                print(f"\nDEBUG: nn_input_update: {nn_input_update}")
             # The new tour has a total demand that is larger than the vehicle capacity
             else:
                 nn_input_update.append([tour_from[-1][2], 0, 0])
-                if len(tour_from) > 1 and tour_from[0][0] != 0:
+                if len(tour_from) > 1 and tour_from[0][0] not in self.depot_indices:
                     nn_input_update.append([tour_from[0][2], 0, 0])
 
                 # Update solution
                 tour_from.append([tour_to[0][0], tour_to[0][1], tour_to[0][2]])  # deepcopy of tour_to
                 tour_from[-1][1] = self.capacity - demand_from
                 tour_from.append([0, 0, 0])
-                if tour_from[0][0] != 0:
+                if tour_from[0][0] not in self.depot_indices:
                     tour_from.insert(0, [0, 0, 0])
                 tour_to[0][1] = unfulfilled_demand  # Update demand of tour_to
 
                 nn_input_update.extend(self._get_network_input_update_for_tour(tour_to, unfulfilled_demand))
 
-        # Add depot tour to the solution tours if it was removed
-        if self.solution[0] != [[0, 0, 0]]:
-            self.solution.insert(0, [[0, 0, 0]])
-            self.nn_input_idx_to_tour[0] = [self.solution[0], 0]
+        # Add depot tours to the solution tours if they were removed
+        for idx, d in enumerate(self.depot_indices):
+            if self.solution[idx] != [[d, 0, idx]]:
+                self.solution.insert(idx, [[d, 0, idx]])
+                self.nn_input_idx_to_tour[idx] = [self.solution[idx], 0]
 
         for update in nn_input_update:
             if update[2] == 0 and update[0] != 0:
@@ -525,7 +528,7 @@ class MDVRPInstance():
 
     def verify_solution(self, config):
         """Verify that a feasible solution has been found."""
-        d = np.zeros((self.nb_customers + 1), dtype=int)
+        d = np.zeros((self.nb_customers + self.n_depots), dtype=int)
         for i in range(len(self.solution)):
             for ii in range(len(self.solution[i])):
                 d[self.solution[i][ii][0]] += self.solution[i][ii][1]
@@ -555,8 +558,12 @@ class MDVRPInstance():
 
     def __deepcopy__(self, memo):
         solution_copy = self.get_solution_copy()
-        new_instance = VRPInstance(self.nb_customers, self.locations, self.original_locations, self.demand,
-                                   self.capacity)
+        new_instance = MDVRPInstance(
+                depot_indices       = self.depot_indices,
+                locations           = self.locations, 
+                original_locations  = self.original_locations,
+                demand              = self.demand,
+                capacity            = self.capacity)
         new_instance.solution = solution_copy
         new_instance.costs_memory = self.costs_memory
 
@@ -567,19 +574,23 @@ def get_mask(origin_nn_input_idx, dynamic_input, instances, config, capacity):
     """ Returns a mask for the current nn_input"""
     batch_size = origin_nn_input_idx.shape[0]
 
-    # Start with all used input positions
+    # Start with all used input positions (i.e. all non-zero ones)
     mask = (dynamic_input[:, :, 1] != 0).cpu().long().numpy()
 
+
+    # FIRST PART: avoid connecting both ends of the same tour or connecting to itself (creating cycles)
     for i in range(batch_size):
-        idx_from = origin_nn_input_idx[i]
+        idx_from = origin_nn_input_idx[i]   # for the i-th instance in the batch, this is the index of the tour end
+                                            # we want to connect from
         origin_tour = instances[i].nn_input_idx_to_tour[idx_from][0]
         origin_pos = instances[i].nn_input_idx_to_tour[idx_from][1]
 
         # Find the start of the tour in the nn input
         # e.g. for the tour [2, 3] two entries in nn input exists
-        if origin_pos == 0:
+        # This is needed to avoid connecting a tour to itself
+        if origin_pos == 0: #if origin is the start then fetch the end
             idx_same_tour = origin_tour[-1][2]
-        else:
+        else: # if origin is the end then fetch the start
             idx_same_tour = origin_tour[0][2]
 
         mask[i, idx_same_tour] = 0
@@ -606,6 +617,6 @@ def get_mask(origin_nn_input_idx, dynamic_input, instances, config, capacity):
     else:
         mask[combined_demand > capacity] = 0
 
-    mask[:, 0] = 1  # Always allow to go to the depot
+    mask[:, self.depot_indices] = 1  # Always allow to go to depots
 
     return mask

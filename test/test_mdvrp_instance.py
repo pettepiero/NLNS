@@ -284,4 +284,45 @@ class MDVRP_instance_test(unittest.TestCase):
                     self.assertEqual(v[3], 1) #encoding
                     
                 
-        
+#    def test__get_network_input_update_for_tour(self):
+#        mdvrp = self.mdvrp_instance
+#        mdvrp.create_initial_solution()
+#        rng = np.random.default_rng(12345)
+#        mdvrp.destroy_point_based(p=0.3, rng=rng)
+#        incomplete_tours = mdvrp.incomplete_tours
+#        print(f"DEBUG: incomplete_tours: \n")
+#        for tour in incomplete_tours:
+#            print(tour)
+#
+#        tour0 = incomplete_tours[0] # should be [[8, 1, None]]
+#        tour1 = incomplete_tours[1] # should be [[12, 9, None]]
+#        tour2 = incomplete_tours[2] # should be [[4, 1, None], [15, 1, None], [0, 0, 0]]
+#        
+#        update0 = mdvrp._get_network_input_update_for_tour(tour=tour0, new_demand=3)
+#        update1 = mdvrp._get_network_input_update_for_tour(tour=tour1, new_demand=3)
+#        update2 = mdvrp._get_network_input_update_for_tour(tour=tour2, new_demand=3)
+
+
+    def test_do_action(self):
+        mdvrp = self.mdvrp_instance
+        mdvrp.create_initial_solution()
+        rng = np.random.default_rng(12345)
+        mdvrp.destroy_point_based(p=0.3, rng=rng)
+
+        nn_input_dynamic, nn_input_static = mdvrp.get_network_input(mdvrp.get_max_nb_input_points())
+        nn_input = np.concat((nn_input_dynamic, nn_input_static), axis=1)
+        # connect incomplete tour #0 [[8, 1, 4]] to incomplete tour #4 [[11, 9, 8]]
+        # 
+        mdvrp.do_action(
+            id_from=4, # incomplete tour #0 is index 4 in input vector
+            id_to=8) # incomplete tour #4 is index 8 in input vector
+        self.assertIn(member=[[8, 1, 4], [11, 9, 8]], container=mdvrp.solution)
+
+        # connect incomplete tour #1 [[12, 9, 5]] to incomplete tour #0 [[8, 1, 4], [11, 9, 8]]
+        # 
+        mdvrp.do_action(
+            id_from=5, # incomplete tour #1 is index 5 in input vector
+            id_to=8) # incomplete tour #0 is index 8 in input vector (last position)
+
+        self.assertIn(member=[[8, 1, 4], [11, 9, 8], [12, 9, 5]], container=mdvrp.solution)
+
