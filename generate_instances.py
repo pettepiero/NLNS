@@ -14,9 +14,10 @@ def write_mdvrplib(filename, config, name="problem"):
     MIN_LON = 0
     MAX_LON = config['grid_size']
 
-    depot_latitudes = np.random.randint(low=MIN_LAT, high=MAX_LAT, size=config['depot_size']).tolist()
-    depot_longitudes = np.random.randint(low=MIN_LON, high=MAX_LON, size=config['depot_size']).tolist()
-    depots_coordinates = list(zip(depot_latitudes, depot_longitudes))
+    #depot_latitudes = np.random.randint(low=MIN_LAT, high=MAX_LAT, size=config['depot_size']).tolist()
+    #depot_longitudes = np.random.randint(low=MIN_LON, high=MAX_LON, size=config['depot_size']).tolist()
+    #depots_coordinates = list(zip(depot_latitudes, depot_longitudes))
+    depot_indices = list(range(1, config['depot_size'] +1))
 
     node_latitudes = np.random.randint(low=MIN_LAT, high=MAX_LAT, size=config['vrp_size']).tolist()
     node_longitudes = np.random.randint(low=MIN_LON, high=MAX_LON, size=config['vrp_size']).tolist()
@@ -25,9 +26,9 @@ def write_mdvrplib(filename, config, name="problem"):
     demands = np.random.poisson(lam=1.0, size=config['vrp_size'])
     # Replace any zeros with 1 (to avoid zero demand)
     demands = np.where(demands == 0, 1, demands)
-    # Convert to int list if needed
+    shifted_d_indices = [i-1 for i in depot_indices]
+    demands[shifted_d_indices] = 0
     demands = demands.tolist()
-
 
     with open(filename, 'w+') as f:
         f.write("\n".join([
@@ -39,6 +40,16 @@ def write_mdvrplib(filename, config, name="problem"):
                 ("EDGE_WEIGHT_TYPE", config['dist_type']),
                 ("CAPACITY", config['capacity'])
             )
+        ]))
+        f.write("\n")
+        f.write("DEPOT_SECTION\n")
+        #f.write("\n".join([
+        #    "{}\t{}\t{}".format(i + 1, x, y)
+        #    for i, (x, y) in enumerate(depots_coordinates)
+        #]))
+        f.write("\n".join([
+            "{}\t{}".format(i + 1, d)
+            for i, d in enumerate(depot_indices)
         ]))
         f.write("\n")
         f.write("NODE_COORD_SECTION\n")
@@ -53,14 +64,9 @@ def write_mdvrplib(filename, config, name="problem"):
             for i, d in enumerate(demands)
         ]))
         f.write("\n")
-        f.write("DEPOT_SECTION\n")
-        f.write("\n".join([
-            "{}\t{}\t{}".format(i + 1, x, y)
-            for i, (x, y) in enumerate(depots_coordinates)
-        ]))
-        f.write("\n")
         f.write("-1\n")
         f.write("EOF\n")
+        print(f"Written data to file: {filename}")
 
 def write_vrplib(filename, loc, demand, capacity, grid_size, name="problem"):
     assert grid_size == 1000 or grid_size == 1000000
@@ -102,7 +108,7 @@ if __name__ == "__main__":
     parser.add_argument("--data_dir", default='data')
     parser.add_argument('--instance_blueprint', default=None, type=str)
     parser.add_argument('--dataset_size', default=1, type=int)
-    parser.add_argument('--seed', default=None, type=int)
+    parser.add_argument('--seed', default=0, type=int)
     parser.add_argument('--grid_size', default=1000, type=int)
     parser.add_argument('--vrp_size', type=int) #number of customers
     parser.add_argument('--depot_size', type=int)
@@ -118,12 +124,12 @@ if __name__ == "__main__":
     if config.problem == "mdvrp":
         assert config.vrp_size, "VRP size needed in mdvrp"
         assert config.depot_size, "Depot size needed in mdvrp"
-        assert config.capacity, "Depot size needed in mdvrp"
+        assert config.depot_size >1, "Depot size <=1 is not mdvrp"
+        assert config.capacity, "Capacity needed in mdvrp"
         
         for i in range(config.dataset_size):
             name = "mdvrp_seed_{}_id_{}".format(config.seed, i)
             filename = os.path.join(config.data_dir, name + ".mdvrp")
-            print(f"\nDEBUG: vars(config):\n{vars(config)}")
             write_mdvrplib(filename, vars(config), name)
 
     elif config.problem == "vrp":
