@@ -1,5 +1,6 @@
 import numpy as np
 from vrp.vrp_problem import VRPInstance
+from vrp.mdvrp_problem import MDVRPInstance
 import pickle
 
 
@@ -157,6 +158,8 @@ def get_customer_demand(blueprint, customer_position):
 def read_instance(path, pkl_instance_idx=0):
     if path.endswith('.vrp'):
         return read_instance_vrp(path)
+    elif path.endswith('.mdvrp'):
+        return read_instance_mdvrp(path) 
     elif path.endswith('.sd'):
         return read_instance_sd(path)
     elif path.endswith('.pkl'):
@@ -164,6 +167,46 @@ def read_instance(path, pkl_instance_idx=0):
     else:
         raise Exception("Unknown instance file type.")
 
+def read_instance_mdvrp(path):
+    file = open(path, "r")
+    lines = [ll.strip() for ll in file]
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if line.startswith("DIMENSION"):
+            dimension = int(line.split(':')[1])
+        elif line.startswith("CAPACITY"):
+            capacity = int(line.split(':')[1])
+        elif line.startswith("NUM_DEPOTS"):
+            num_depots = int(line.split(':')[1])
+        elif line.startswith('NODE_COORD_SECTION'):
+            locations = np.loadtxt(lines[i + 1:i + 1 + dimension], dtype=int)
+            i = i + dimension
+        elif line.startswith('DEMAND_SECTION'):
+            demand = np.loadtxt(lines[i + 1:i + 1 + dimension], dtype=int)
+            i = i + dimension
+        elif line.startswith('TYPE'):
+            problem_type = line.split(':')[1]
+            problem_type = line.split(' ')[-1]
+            assert problem_type == "MDVRP", f"Wrong problem type in data: passed: {problem_type}"
+        elif line.startswith('DEPOT_SECTION'):
+            depot_indices = np.loadtxt(lines[i + 1:i + 1 + num_depots], dtype=int)
+            i = i + num_depots 
+        i += 1
+
+    original_locations = locations[:, 1:]
+    locations = original_locations / 1000
+    demand = demand[:, 1:].squeeze()
+    depot_indices = depot_indices[:, 1:].squeeze()
+    depot_indices = depot_indices.tolist()
+
+    instance = MDVRPInstance(
+            depot_indices = depot_indices,
+            locations = locations,
+            original_locations = original_locations,
+            demand = demand, 
+            capacity = capacity)
+    return instance
 
 def read_instance_vrp(path):
     file = open(path, "r")

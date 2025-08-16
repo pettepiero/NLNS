@@ -65,5 +65,7 @@ if __name__ == '__main__':
         search.evaluate_batch_search(config, config.model_path)
     elif config.mode == "eval_single":
         search.evaluate_single_search(config, config.model_path, config.instance_path)
+    elif config.mode == "multi_depot":
+        search.evaluate_multi_depot_search(config, config.instance_path)
     else:
         raise Exception("Unknown mode")

@@ -4,11 +4,11 @@ import os
 import time
 import torch
 import search_single
-from vrp.data_utils import read_instances_pkl
+from vrp.data_utils import read_instances_pkl, read_instance
 import glob
 import search_batch
 from actor import VrpActorModel
-
+from dummy_model import dummy_model
 
 class LnsOperatorPair:
 
@@ -97,6 +97,44 @@ def evaluate_single_search(config, model_path, instance_path):
             for _ in range(config.nb_runs):
                 cost, duration = search_single.lns_single_search_mp(instance_path, config.lns_timelimit, config,
                                                                     model_path, i)
+                instance_names.append(instance_path)
+                costs.append(cost)
+                durations.append(duration)
+
+    output_path = os.path.join(config.output_path, "search", 'results.txt')
+    results = np.array(list(zip(instance_names, costs, durations)))
+    np.savetxt(output_path, results, delimiter=',', fmt=['%s', '%s', '%s'], header="name, cost, runtime")
+
+    logging.info(
+        f"NLNS single search evaluation results: Total Nb. Runs: {len(costs)}, "
+        f"Mean Costs: {np.mean(costs):.3f} Mean Runtime (s): {np.mean(durations):.1f}")
+
+def evaluate_multi_depot_search(config, instance_path):
+    assert instance_path is not None, "No instance path given"
+    assert instance_path.endswith(".mdvrp"), "Wrong instance type (doesn't end with '.mdvrp')"
+
+    instance_names, costs, durations = [], [], []
+    logging.info("### Single instance search for multi depot case###")
+
+    if instance_path.endswith(".mdvrp"):
+        logging.info("Starting solving a single instance")
+        instance_files_path = [instance_path]
+    #elif instance_path.endswith(".pkl"):
+    #    instance_files_path = [instance_path] * len(read_instances_pkl(instance_path))
+    #    logging.info("Starting solving a .pkl instance set")
+    elif os.path.isdir(instance_path):
+        instance_files_path = [os.path.join(instance_path, f) for f in os.listdir(instance_path)]
+        logging.info("Starting solving all instances in directory")
+    else:
+        raise Exception("Unknown instance file format.")
+
+    for i, instance_path in enumerate(instance_files_path):
+        if instance_path.endswith(".mdvrp"):
+            for _ in range(config.nb_runs):
+                #cost, duration = search_single.lns_single_search_mp(instance_path, config.lns_timelimit, config,
+                #                                                    model_path, i)
+
+                cost, duration = dummy_model(instance_path, config)
                 instance_names.append(instance_path)
                 costs.append(cost)
                 durations.append(duration)

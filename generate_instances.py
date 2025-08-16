@@ -17,7 +17,7 @@ def write_mdvrplib(filename, config, name="problem"):
     #depot_latitudes = np.random.randint(low=MIN_LAT, high=MAX_LAT, size=config['depot_size']).tolist()
     #depot_longitudes = np.random.randint(low=MIN_LON, high=MAX_LON, size=config['depot_size']).tolist()
     #depots_coordinates = list(zip(depot_latitudes, depot_longitudes))
-    depot_indices = list(range(1, config['depot_size'] +1))
+    depot_indices = list(range(config['depot_size']))
 
     node_latitudes = np.random.randint(low=MIN_LAT, high=MAX_LAT, size=config['vrp_size']).tolist()
     node_longitudes = np.random.randint(low=MIN_LON, high=MAX_LON, size=config['vrp_size']).tolist()
@@ -26,8 +26,7 @@ def write_mdvrplib(filename, config, name="problem"):
     demands = np.random.poisson(lam=1.0, size=config['vrp_size'])
     # Replace any zeros with 1 (to avoid zero demand)
     demands = np.where(demands == 0, 1, demands)
-    shifted_d_indices = [i-1 for i in depot_indices]
-    demands[shifted_d_indices] = 0
+    demands[depot_indices] = 0
     demands = demands.tolist()
 
     with open(filename, 'w+') as f:
@@ -37,6 +36,7 @@ def write_mdvrplib(filename, config, name="problem"):
                 ("NAME", name),
                 ("TYPE", "MDVRP"),
                 ("DIMENSION", config['vrp_size']),
+                ("NUM_DEPOTS", config['depot_size']),
                 ("EDGE_WEIGHT_TYPE", config['dist_type']),
                 ("CAPACITY", config['capacity'])
             )
@@ -48,19 +48,22 @@ def write_mdvrplib(filename, config, name="problem"):
         #    for i, (x, y) in enumerate(depots_coordinates)
         #]))
         f.write("\n".join([
-            "{}\t{}".format(i + 1, d)
+            #"{}\t{}".format(i + 1, d)
+            "{}\t{}".format(i, d)
             for i, d in enumerate(depot_indices)
         ]))
         f.write("\n")
         f.write("NODE_COORD_SECTION\n")
         f.write("\n".join([
-            "{}\t{}\t{}".format(i + 1, x, y)
+            #"{}\t{}\t{}".format(i + 1, x, y)
+            "{}\t{}\t{}".format(i, x, y)
             for i, (x, y) in enumerate(nodes_coordinates)
         ]))
         f.write("\n")
         f.write("DEMAND_SECTION\n")
         f.write("\n".join([
-            "{}\t{}".format(i + 1, d)
+            #"{}\t{}".format(i + 1, d)
+            "{}\t{}".format(i, d)
             for i, d in enumerate(demands)
         ]))
         f.write("\n")
@@ -125,6 +128,7 @@ if __name__ == "__main__":
         assert config.vrp_size, "VRP size needed in mdvrp"
         assert config.depot_size, "Depot size needed in mdvrp"
         assert config.depot_size >1, "Depot size <=1 is not mdvrp"
+        assert config.depot_size < config.vrp_size, "Depot size < #customers"
         assert config.capacity, "Capacity needed in mdvrp"
         
         for i in range(config.dataset_size):

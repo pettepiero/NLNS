@@ -4,7 +4,7 @@ import torch
 def get_config():
     parser = argparse.ArgumentParser(description='Neural Large Neighborhood Search')
 
-    parser.add_argument('--mode', default='train', type=str, choices=['train', 'eval_single', 'eval_batch'])
+    parser.add_argument('--mode', default='train', type=str, choices=['train', 'eval_single', 'eval_batch', 'multi_depot'])
     parser.add_argument('--output_path', type=str, default="")
     parser.add_argument('--validation_seed', default=0, type=int)
     parser.add_argument('--device', default='cuda', type=str)
@@ -32,7 +32,7 @@ def get_config():
     parser.add_argument('--lns_nb_cpus', default=1, type=int)
     parser.add_argument('--lns_timelimit', default=180, type=int)
     parser.add_argument('--lns_max_iterations', default=50000, type=int)  # Is ignored by single instance search
-    parser.add_argument('--lns_batch_size', default=300, type=int)
+    parser.add_argument('--lns_batch_size', default=300, type=int) #note: this indicates multiple copies of the same vrp instance
     parser.add_argument('--lns_t_max', default=1000, type=int)
     parser.add_argument('--lns_t_min', default=10, type=float)
     parser.add_argument('--lns_reheating_nb', default=5, type=int)

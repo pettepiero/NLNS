@@ -395,7 +395,19 @@ class MDVRPInstance():
                     destroyed_location_idx.append(tour[-1][0])
                     i += 1
 
-        self.open_nn_input_idx = list(range(self.n_depots, i))
+        self.open_nn_input_idx = []
+        for tour in incomplete_tours:
+            if len(tour)>1:
+               # if first end not depot
+                if tour[0][0] not in self.depot_indices:
+                    self.open_nn_input_idx.append(tour[0][2])
+                if tour[-1][0] not in self.depot_indices:
+                    self.open_nn_input_idx.append(tour[-1][2])
+            if len(tour) == 1:
+                if tour[0][0] not in self.depot_indices:
+                    self.open_nn_input_idx.append(tour[0][2])
+
+        #self.open_nn_input_idx = list(range(self.n_depots, i))
         self.nn_input_idx_to_tour = network_input_idx_to_tour
         return nn_input[:, :2], nn_input[:, 2:]
 
@@ -439,6 +451,7 @@ class MDVRPInstance():
     def do_action(self, id_from, id_to):
         """Performs an action. The tour end represented by input with the id id_from is connected to the tour end
          presented by the input with id id_to."""
+
         tour_from = self.nn_input_idx_to_tour[id_from][0]  # Tour that should be connected
         tour_to = self.nn_input_idx_to_tour[id_to][0]  # to this tour.
         pos_from = self.nn_input_idx_to_tour[id_from][1]  # Position of the location that should be connected in tour_from
@@ -477,7 +490,14 @@ class MDVRPInstance():
             nn_input_update.append([tour_from[-1][2], 0, 0])
             nn_input_update.append([tour_to[0][2], 0, 0])
             tour_from.extend(tour_to)
-            self.solution.remove(tour_to)
+
+            for t in self.solution:
+                if t is tour_to:
+                    self.solution.remove(t)
+                    break
+            else:
+                raise ValueError(f"{tour_to} not found in self.solution")
+            #self.solution.remove(tour_to)
             nn_input_update.extend(self._get_network_input_update_for_tour(tour_from, combined_demand))
 
         # Case 2
@@ -492,12 +512,16 @@ class MDVRPInstance():
                     nn_input_update.append([tour_from[-1][2], 0, 0])
                 # Update solution
                 tour_from.extend(tour_to)
-                self.solution.remove(tour_to)
+
+                for t in self.solution:
+                    if t is tour_to:
+                        self.solution.remove(t)
+                        break
+                else:
+                    raise ValueError(f"{tour_to} not found in self.solution")
+                #self.solution.remove(tour_to)
                 # Generate input update
-                print(f"\nDEBUG: before nn_input_update: {nn_input_update}")
                 nn_input_update.extend(self._get_network_input_update_for_tour(tour_from, combined_demand))
-                print(f"\nDEBUG: tour_from: {tour_from}")
-                print(f"\nDEBUG: nn_input_update: {nn_input_update}")
             # The new tour has a total demand that is larger than the vehicle capacity
             else:
                 nn_input_update.append([tour_from[-1][2], 0, 0])
@@ -521,9 +545,11 @@ class MDVRPInstance():
                 self.nn_input_idx_to_tour[idx] = [self.solution[idx], 0]
 
         for update in nn_input_update:
-            if update[2] == 0 and update[0] != 0:
+            #if update[2] == 0 and update[0] != 0:
+            if update[2] == 0 and update[0] not in self.depot_indices:
                 self.open_nn_input_idx.remove(update[0])
 
+        self.incomplete_tours = self._get_incomplete_tours()
         return nn_input_update, tour_from[-1][2]
 
     def verify_solution(self, config):
@@ -543,9 +569,8 @@ class MDVRPInstance():
             customers = []
             for tour in self.solution:
                 for c in tour:
-                    if c[0] != 0:
+                    if c[0] not in self.depot_indices:
                         customers.append(c[0])
-
             if len(customers) > len(set(customers)):
                 raise Exception('Solution could not be verified.')
 
@@ -597,6 +622,10 @@ def get_mask(origin_nn_input_idx, dynamic_input, instances, config, capacity):
 
         # Do not allow origin location = destination location
         mask[i, idx_from] = 0
+        
+        # allow to go to depots
+        depot_indices = instances[i].depot_indices
+        mask[i, depot_indices] = 1
 
     mask = torch.from_numpy(mask)
 
@@ -616,7 +645,5 @@ def get_mask(origin_nn_input_idx, dynamic_input, instances, config, capacity):
         mask[(~multiple_customer_tour) & (dynamic_input[:, :, 0] >= capacity)] = 0
     else:
         mask[combined_demand > capacity] = 0
-
-    mask[:, self.depot_indices] = 1  # Always allow to go to depots
 
     return mask

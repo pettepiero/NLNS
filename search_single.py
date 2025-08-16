@@ -27,6 +27,7 @@ def lns_single_seach_job(args):
             start_time_reheating = time.time()
 
             # Create a batch of copies of the same instances that can be repaired in parallel
+            #note: lns_batch_size indicates multiple copies of the same vrp instance
             instance_copies = [deepcopy(instance) for _ in range(config.lns_batch_size)]
 
             iter = -1
@@ -118,3 +119,5 @@ def lns_single_search_mp(instance_path, timelimit, config, model_path, pkl_insta
     duration = time.time() - start_time
     instance.verify_solution(config)
     return instance.get_costs(config.round_distances), duration
+
+
