@@ -6,6 +6,7 @@ import math
 import search
 import numpy as np
 from vrp.mdvrp_problem import get_mask
+from plot.plot import plot_instance
 
 class DummyActorModel(nn.Module):
     def __init__(self, input_size=4, hidden_size=16):
@@ -28,7 +29,7 @@ class DummyActorModel(nn.Module):
         x = self.fc2(x).squeeze(-1)  # [B, N]
         return x
 
-def dummy_model(instance_path, config, actor=None):
+def dummy_model(instance_path, config, actor=None, plot_image=False, img_filename: str=None):
     instance = read_instance(instance_path)
     start_time = time.time()
     instance.create_initial_solution()
@@ -93,8 +94,16 @@ def dummy_model(instance_path, config, actor=None):
 
     cost = instance.get_costs(config.round_distances)
     duration = time.time() - start_time
-    print(f"Instance.solution:\n")
+    if plot_image:
+        if img_filename is not None:
+            filename = img_filename
+        else:
+            filename = "solution_plot.png"
+        plot_instance(instance, filename) 
+
+    print(f"DEBUG: solution:")
     for el in instance.solution:
         print(el)
+
     return cost, duration
 

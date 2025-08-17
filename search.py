@@ -134,7 +134,10 @@ def evaluate_multi_depot_search(config, instance_path):
                 #cost, duration = search_single.lns_single_search_mp(instance_path, config.lns_timelimit, config,
                 #                                                    model_path, i)
 
-                cost, duration = dummy_model(instance_path, config)
+                cost, duration = dummy_model(
+                        instance_path   = instance_path,
+                        config          = config, 
+                        plot_image     = True)
                 instance_names.append(instance_path)
                 costs.append(cost)
                 durations.append(duration)
