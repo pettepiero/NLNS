@@ -6,7 +6,6 @@ import torch.nn.functional as F
 
 
 class Encoder(nn.Module):
-
     def __init__(self, input_size, hidden_size):
         super(Encoder, self).__init__()
         self.embed = nn.Linear(input_size, hidden_size)

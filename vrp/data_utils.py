@@ -8,8 +8,9 @@ class InstanceBlueprint:
     """Describes the properties of a certain instance type (e.g. number of customers)."""
 
     def __init__(self, nb_customers, depot_position, customer_position, nb_customer_cluster, demand_type, demand_min,
-                 demand_max, capacity, grid_size):
+                 demand_max, capacity, grid_size, n_depots=1):
         self.nb_customers = nb_customers
+        self.n_depots = n_depots 
         self.depot_position = depot_position
         self.customer_position = customer_position
         self.nb_customers_cluster = nb_customer_cluster
@@ -32,6 +33,9 @@ def get_blueprint(blueprint_name):
     elif instance_type == "S":
         import vrp.dataset_blueprints.S
         return vrp.dataset_blueprints.S.dataset[instance]
+    elif instance_type == "MD":
+        import vrp.dataset_blueprints.MD
+        return vrp.dataset_blueprints.MD.dataset[instance]
     raise Exception('Unknown blueprint instance')
 
 
@@ -54,23 +58,52 @@ def create_dataset(size, config, seed=None, create_solution=False, use_cost_memo
 
 
 def generate_Instance(blueprint, use_cost_memory):
-    depot_position = get_depot_position(blueprint)
-    customer_position = get_customer_position(blueprint)
-    demand = get_customer_demand(blueprint, customer_position)
-    original_locations = np.insert(customer_position, 0, depot_position, axis=0)
-    demand = np.insert(demand, 0, 0, axis=0)
+    if blueprint.n_depots == 1:
+        depot_position = get_depot_position(blueprint)
+        customer_position = get_customer_position(blueprint)
+        demand = get_customer_demand(blueprint, customer_position)
+        original_locations = np.insert(customer_position, 0, depot_position, axis=0)
+        demand = np.insert(demand, 0, 0, axis=0)
 
-    if blueprint.grid_size == 1000:
-        locations = original_locations / 1000
-    elif blueprint.grid_size == 1000000:
-        locations = original_locations / 1000000
-    else:
-        assert blueprint.grid_size == 1
-        locations = original_locations
+        if blueprint.grid_size == 1000:
+            locations = original_locations / 1000
+        elif blueprint.grid_size == 1000000:
+            locations = original_locations / 1000000
+        else:
+            assert blueprint.grid_size == 1
+            locations = original_locations
 
-    vrp_instance = VRPInstance(blueprint.nb_customers, locations, original_locations, demand, blueprint.capacity,
-                               use_cost_memory)
-    return vrp_instance
+        vrp_instance = VRPInstance(blueprint.nb_customers, locations, original_locations, demand, blueprint.capacity,
+                                   use_cost_memory)
+        return vrp_instance
+    elif blueprint.n_depots > 1: #mdvrp
+        depot_positions = []
+        for d in range(blueprint.n_depots):
+            pos = get_depot_position(blueprint)
+            depot_positions.append(pos)
+
+        customer_position = get_customer_position(blueprint)
+        original_locations = depot_positions
+        for pos in customer_position:
+            original_locations.append(pos)
+
+        original_locations = np.array(original_locations)
+        #original_locations = np.insert(customer_position, 0, depot_position, axis=0)
+
+        demand = get_customer_demand(blueprint, customer_position)
+        demand = np.insert(demand, 0, 0, axis=0)
+
+        if blueprint.grid_size == 1000:
+            locations = original_locations / 1000
+        elif blueprint.grid_size == 1000000:
+            locations = original_locations / 1000000
+        else:
+            assert blueprint.grid_size == 1
+            locations = original_locations
+        depot_indices = list(range(blueprint.n_depots))
+
+        mdvrp_instance = MDVRPInstance(depot_indices, locations, original_locations, demand, blueprint.capacity, use_cost_memory)
+        return mdvrp_instance
 
 
 def get_depot_position(blueprint):
@@ -125,7 +158,13 @@ def get_customer_position(blueprint):
 
 def get_customer_demand(blueprint, customer_position):
     if blueprint.demand_type == 'inter':
-        return np.random.randint(blueprint.demand_min, blueprint.demand_max + 1, size=blueprint.nb_customers)
+        if blueprint.n_depots == 1:
+            return np.random.randint(blueprint.demand_min, blueprint.demand_max + 1, size=blueprint.nb_customers)
+        elif blueprint.n_depots > 1:
+            demands = np.random.randint(blueprint.demand_min, blueprint.demand_max + 1, size=blueprint.nb_customers + blueprint.n_depots)
+            depot_indices = list(range(blueprint.n_depots))
+            demands[depot_indices] = 0
+            return demands
     elif blueprint.demand_type == 'U':
         return np.ones(blueprint.nb_customers, dtype=int)
     elif blueprint.demand_type == 'SL':
