@@ -14,12 +14,13 @@ from search import LnsOperatorPair
 
 
 def train_nlns(actor, critic, run_id, config):
+    rng = np.random.default_rng(config.seed)
     batch_size = config.batch_size
 
     logging.info("Generating training data...")
     # Create training and validation set. The initial solutions are created greedily
     training_set = create_dataset(size=batch_size * config.nb_batches_training_set, config=config,
-                                  create_solution=True, use_cost_memory=False)
+                                  create_solution=True, use_cost_memory=False, seed=config.seed)
     logging.info("Generating validation data...")
     validation_instances = create_dataset(size=config.valid_size, config=config, seed=config.validation_seed,
                                           create_solution=True)
@@ -35,6 +36,7 @@ def train_nlns(actor, critic, run_id, config):
 
     logging.info("Starting training...")
     for batch_idx in range(1, config.nb_train_batches + 1):
+        print(f"\n\tDEBUG: batch_idx = {batch_idx}")
         # Get a batch of training instances from the training set. Training instances are generated in advance, because
         # generating them is expensive.
         training_set_batch_idx = batch_idx % config.nb_batches_training_set
@@ -44,7 +46,7 @@ def train_nlns(actor, critic, run_id, config):
         # Destroy and repair the set of instances
         destroy_instances(tr_instances, config.lns_destruction, config.lns_destruction_p)
         costs_destroyed = [instance.get_costs_incomplete(config.round_distances) for instance in tr_instances]
-        tour_indices, tour_logp, critic_est = repair.repair(tr_instances, actor, config, critic)
+        tour_indices, tour_logp, critic_est = repair.repair(tr_instances, actor, config, critic, rng)
         costs_repaired = [instance.get_costs(config.round_distances) for instance in tr_instances]
 
         # Reward/Advantage computation

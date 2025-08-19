@@ -43,25 +43,26 @@ def create_dataset(size, config, seed=None, create_solution=False, use_cost_memo
     instances = []
     blueprints = get_blueprint(config.instance_blueprint)
 
-    if seed is not None:
-        np.random.seed(seed)
+    #if seed is not None:
+    #    np.random.seed(seed)
+    rng = np.random.default_rng(seed)
     for i in range(size):
         if isinstance(blueprints, list):
-            blueprint_rnd_idx = np.random.randint(0, len(blueprints), 1).item()
-            vrp_instance = generate_Instance(blueprints[blueprint_rnd_idx], use_cost_memory)
+            blueprint_rnd_idx = rng.integers(0, len(blueprints), 1).item()
+            vrp_instance = generate_Instance(blueprints[blueprint_rnd_idx], use_cost_memory, rng)
         else:
-            vrp_instance = generate_Instance(blueprints, use_cost_memory)
+            vrp_instance = generate_Instance(blueprints, use_cost_memory, rng)
         instances.append(vrp_instance)
         if create_solution:
             vrp_instance.create_initial_solution()
     return instances
 
 
-def generate_Instance(blueprint, use_cost_memory):
+def generate_Instance(blueprint, use_cost_memory, rng):
     if blueprint.n_depots == 1:
-        depot_position = get_depot_position(blueprint)
-        customer_position = get_customer_position(blueprint)
-        demand = get_customer_demand(blueprint, customer_position)
+        depot_position = get_depot_position(blueprint, rng)
+        customer_position = get_customer_position(blueprint, rng)
+        demand = get_customer_demand(blueprint, customer_position, rng)
         original_locations = np.insert(customer_position, 0, depot_position, axis=0)
         demand = np.insert(demand, 0, 0, axis=0)
 
@@ -79,10 +80,10 @@ def generate_Instance(blueprint, use_cost_memory):
     elif blueprint.n_depots > 1: #mdvrp
         depot_positions = []
         for d in range(blueprint.n_depots):
-            pos = get_depot_position(blueprint)
+            pos = get_depot_position(blueprint, rng)
             depot_positions.append(pos)
 
-        customer_position = get_customer_position(blueprint)
+        customer_position = get_customer_position(blueprint, rng)
         original_locations = depot_positions
         for pos in customer_position:
             original_locations.append(pos)
@@ -90,7 +91,7 @@ def generate_Instance(blueprint, use_cost_memory):
         original_locations = np.array(original_locations)
         #original_locations = np.insert(customer_position, 0, depot_position, axis=0)
 
-        demand = get_customer_demand(blueprint, customer_position)
+        demand = get_customer_demand(blueprint, customer_position, rng)
         demand = np.insert(demand, 0, 0, axis=0)
 
         if blueprint.grid_size == 1000:
@@ -106,14 +107,14 @@ def generate_Instance(blueprint, use_cost_memory):
         return mdvrp_instance
 
 
-def get_depot_position(blueprint):
+def get_depot_position(blueprint, rng):
     if blueprint.depot_position == 'R':
         if blueprint.grid_size == 1:
-            return np.random.uniform(size=(1, 2))
+            return rng.uniform(size=(1, 2))
         elif blueprint.grid_size == 1000:
-            return np.random.randint(0, 1001, 2)
+            return rng.integers(0, 1001, 2)
         elif blueprint.grid_size == 1000000:
-            return np.random.randint(0, 1000001, 2)
+            return rng.integers(0, 1000001, 2)
     elif blueprint.depot_position == 'C':
         if blueprint.grid_size == 1:
             return np.array([0.5, 0.5])
@@ -125,54 +126,54 @@ def get_depot_position(blueprint):
         raise Exception("Unknown depot position")
 
 
-def get_customer_position_clustered(nb_customers, blueprint):
+def get_customer_position_clustered(nb_customers, blueprint, rng):
     assert blueprint.grid_size == 1000
-    random_centers = np.random.randint(0, 1001, (blueprint.nb_customers_cluster, 2))
+    random_centers = rng.integers(0, 1001, (blueprint.nb_customers_cluster, 2))
     customer_positions = []
     while len(customer_positions) + blueprint.nb_customers_cluster < nb_customers:
-        random_point = np.random.randint(0, 1001, (1, 2))
+        random_point = rng.integers(0, 1001, (1, 2))
         a = random_centers
         b = np.repeat(random_point, blueprint.nb_customers_cluster, axis=0)
         distances = np.sqrt(np.sum((a - b) ** 2, axis=1))
         acceptance_prob = np.sum(np.exp(-distances / 40))
-        if acceptance_prob > np.random.rand():
+        if acceptance_prob > rng.random():
             customer_positions.append(random_point[0])
     return np.concatenate((random_centers, np.array(customer_positions)), axis=0)
 
 
-def get_customer_position(blueprint):
+def get_customer_position(blueprint, rng):
     if blueprint.customer_position == 'R':
         if blueprint.grid_size == 1:
-            return np.random.uniform(size=(blueprint.nb_customers, 2))
+            return rng.uniform(size=(blueprint.nb_customers, 2))
         elif blueprint.grid_size == 1000:
-            return np.random.randint(0, 1001, (blueprint.nb_customers, 2))
+            return rng.integers(0, 1001, (blueprint.nb_customers, 2))
         elif blueprint.grid_size == 1000000:
-            return np.random.randint(0, 1000001, (blueprint.nb_customers, 2))
+            return rng.integers(0, 1000001, (blueprint.nb_customers, 2))
     elif blueprint.customer_position == 'C':
-        return get_customer_position_clustered(blueprint.nb_customers, blueprint)
+        return get_customer_position_clustered(blueprint.nb_customers, blueprint, rng)
     elif blueprint.customer_position == 'RC':
-        customer_position = get_customer_position_clustered(int(blueprint.nb_customers / 2), blueprint)
-        customer_position_2 = np.random.randint(0, 1001, (blueprint.nb_customers - len(customer_position), 2))
+        customer_position = get_customer_position_clustered(int(blueprint.nb_customers / 2), blueprint, rng)
+        customer_position_2 = rng.integers(0, 1001, (blueprint.nb_customers - len(customer_position), 2))
         return np.concatenate((customer_position, customer_position_2), axis=0)
 
 
-def get_customer_demand(blueprint, customer_position):
+def get_customer_demand(blueprint, customer_position, rng):
     if blueprint.demand_type == 'inter':
         if blueprint.n_depots == 1:
-            return np.random.randint(blueprint.demand_min, blueprint.demand_max + 1, size=blueprint.nb_customers)
+            return rng.integers(blueprint.demand_min, blueprint.demand_max + 1, size=blueprint.nb_customers)
         elif blueprint.n_depots > 1:
-            demands = np.random.randint(blueprint.demand_min, blueprint.demand_max + 1, size=blueprint.nb_customers + blueprint.n_depots)
+            demands = rng.integers(blueprint.demand_min, blueprint.demand_max + 1, size=blueprint.nb_customers + blueprint.n_depots)
             depot_indices = list(range(blueprint.n_depots))
             demands[depot_indices] = 0
             return demands
     elif blueprint.demand_type == 'U':
         return np.ones(blueprint.nb_customers, dtype=int)
     elif blueprint.demand_type == 'SL':
-        small_demands_nb = int(np.random.uniform(0.7, 0.95, 1).item() * blueprint.nb_customers)
-        demands_small = np.random.randint(1, 11, size=small_demands_nb)
-        demands_large = np.random.randint(50, 101, size=blueprint.nb_customers - small_demands_nb)
+        small_demands_nb = int(rng.uniform(0.7, 0.95, 1).item() * blueprint.nb_customers)
+        demands_small = rng.integers(1, 11, size=small_demands_nb)
+        demands_large = rng.integers(50, 101, size=blueprint.nb_customers - small_demands_nb)
         demands = np.concatenate((demands_small, demands_large), axis=0)
-        np.random.shuffle(demands)
+        rng.shuffle(demands)
         return demands
     elif blueprint.demand_type == 'Q':
         assert blueprint.grid_size == 1000
@@ -180,15 +181,15 @@ def get_customer_demand(blueprint, customer_position):
         for i in range(blueprint.nb_customers):
             if (customer_position[i][0] > 500 and customer_position[i][1] > 500) or (
                     customer_position[i][0] < 500 and customer_position[i][1] < 500):
-                demands[i] = np.random.randint(51, 101, 1).item()
+                demands[i] = rng.integers(51, 101, 1).item()
             else:
-                demands[i] = np.random.randint(1, 51, 1).item()
+                demands[i] = rng.integers(1, 51, 1).item()
         return demands
     elif blueprint.demand_type == 'minOrMax':
         demands_small = np.repeat(blueprint.demand_min, blueprint.nb_customers * 0.5)
         demands_large = np.repeat(blueprint.demand_max, blueprint.nb_customers - (blueprint.nb_customers * 0.5))
         demands = np.concatenate((demands_small, demands_large), axis=0)
-        np.random.shuffle(demands)
+        rng.shuffle(demands)
         return demands
     else:
         raise Exception("Unknown customer demand.")

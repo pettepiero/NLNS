@@ -321,8 +321,147 @@ class MDVRP_instance_test(unittest.TestCase):
         # connect incomplete tour #1 [[12, 9, 5]] to incomplete tour #0 [[8, 1, 4], [11, 9, 8]]
         # 
         mdvrp.do_action(
-            id_from=5, # incomplete tour #1 is index 5 in input vector
-            id_to=8) # incomplete tour #0 is index 8 in input vector (last position)
+            id_from=6, # incomplete tour #1 is index 6 in input vector
+            id_to=4) # incomplete tour #0 is index 4 in input vector 
+        member = [[12, 9, 5], [8, 1, 4], [11, 9, 8]]
+        member_reversed = list(reversed(member)) 
+        self.assertTrue(
+                member in mdvrp.solution or member_reversed in mdvrp.solution,
+                f"Neither: \n{member} \nnor\n {member_reversed} \nfound in solution"
+                )
 
-        self.assertIn(member=[[8, 1, 4], [11, 9, 8], [12, 9, 5]], container=mdvrp.solution)
 
+    def test_do_action2(self):
+        mdvrp = self.mdvrp_instance
+        mdvrp.create_initial_solution()
+        rng = np.random.default_rng(10)
+        mdvrp.destroy_point_based(p=0.3, rng=rng)
+
+        nn_input_dynamic, nn_input_static = mdvrp.get_network_input(mdvrp.get_max_nb_input_points())
+
+        #print(f"\nin test_do_action2:\nDEBUG: mdvrp.solution:")
+        #for el in mdvrp.solution:
+        #    print(f"\t{el}")
+        #print("\n")
+        #print(f"\nin test_do_action2:\nDEBUG: mdvrp.incomplete_tours:")
+        #for el in mdvrp.incomplete_tours:
+        #    print(f"\t{el}")
+        #print("\n")
+
+        nn_input = np.concat((nn_input_dynamic, nn_input_static), axis=1)
+        # connect incomplete tour #2 [[17, 9, 6]] to incomplete tour #0 [[1, 0, 1], [19, 3, 4]]
+        # 
+        #print(f"\tnn_input:")
+        #for el in nn_input:
+        #    print(f"\t{el}")
+        #print(f"\tmdvrp.nn_input_idx_to_tour")
+        #for el in mdvrp.nn_input_idx_to_tour:
+        #    print(f"\t{el}")
+        #print(f"\tfrom tour: {mdvrp.incomplete_tours[2]}")
+        #print(f"\tto tour: {mdvrp.incomplete_tours[0]}")
+        mdvrp.do_action(
+            id_from=6, # incomplete tour #2 is index 6 in input vector
+            id_to=4) # incomplete tour #0 is index 4 in input vector
+        self.assertIn(member=[[1, 0, 1], [19, 3, 4], [17, 9, 6]], container=mdvrp.solution)
+
+        #print(f"\nin test_do_action2:\nDEBUG: mdvrp.solution:")
+        #for el in mdvrp.solution:
+        #    print(f"\t{el}")
+        #print("\n")
+        #print(f"\nin test_do_action2:\nDEBUG: mdvrp.incomplete_tours:")
+        #for el in mdvrp.incomplete_tours:
+        #    print(f"\t{el}")
+        #print("\n")
+
+        nn_input = np.concat((nn_input_dynamic, nn_input_static), axis=1)
+        # connect incomplete tour #2 [[17, 9, 6]] to incomplete tour #0 [[1, 0, 1], [19, 3, 4]]
+        # 
+        #print(f"\tnn_input:")
+        #for el in nn_input:
+        #    print(f"\t{el}")
+        #print(f"\tmdvrp.nn_input_idx_to_tour")
+        #for el in mdvrp.nn_input_idx_to_tour:
+        #    print(f"\t{el}")
+        #print(f"\tfrom tour: {mdvrp.incomplete_tours[2]}")
+        #print(f"\tto tour: {mdvrp.incomplete_tours[0]}")
+        # connect incomplete tour #3 [[20, 9, 8], [5, 5, None], [1, 0, 1]] to depot [[1, 0, 1]]
+        # 
+        mdvrp.do_action(
+            id_from=7, # incomplete tour #3 is index 7 in input vector
+            id_to=1) # depot 1 is index 1 in input vector 
+
+        member = [[1, 0, 1], [20, 9, 8], [5, 5, None], [1, 0, 1]]
+        member_reversed = list(reversed(member)) 
+        self.assertTrue(
+                member in mdvrp.solution or member_reversed in mdvrp.solution,
+                f"Neither: \n{member} \nnor\n {member_reversed} \nfound in solution"
+                )
+
+
+    def test__rebuild_idx_mapping(self):
+        mdvrp = self.mdvrp_instance
+        mdvrp.create_initial_solution()
+        rng = np.random.default_rng(10)
+        mdvrp.destroy_point_based(p=0.3, rng=rng)
+        nn_input_dynamic, nn_input_static = mdvrp.get_network_input(mdvrp.get_max_nb_input_points())
+        
+        #print(f"Destroyed solution:")
+        #for el in mdvrp.solution:
+        #    print(f"\t{el}")
+        #print("\n") 
+        #print("%%%%%%%%%%%%%%%%%%%%%%%%%%%")
+        #print(f"nn_input_idx_to_tour:")
+        #for el in mdvrp.nn_input_idx_to_tour:
+        #    print(f"\t{el}")
+        #print("\n") 
+        #print("\n") 
+        
+        result = mdvrp._rebuild_idx_mapping()
+        known_result = [
+                [[[0, 0, 0]], 0],
+                [[[1, 0, 1]], 0],
+                [[[2, 0, 2]], 0],
+                [[[3, 0, 3]], 0],
+                [[[1, 0, 1], [19, 3, 4]], 1],
+                [[[16, 4, 5]], 0],
+                [[[17, 9, 6]], 0],
+                [[[7, 6, 7]], 0],
+                [[[20, 9, 8], [5, 5, None], [1, 0, 1]], 0],
+                [[[18, 3, 9]], 0],
+                [[[13, 3, 10]], 0]]
+
+        self.assertEqual(result, known_result)
+
+    def test__rebuild_idx_mapping2(self):
+        mdvrp = self.mdvrp_instance
+        mdvrp.create_initial_solution()
+        rng = np.random.default_rng(1234)
+        mdvrp.destroy_point_based(p=0.3, rng=rng)
+        nn_input_dynamic, nn_input_static = mdvrp.get_network_input(mdvrp.get_max_nb_input_points())
+        
+        print(f"Destroyed solution:")
+        for el in mdvrp.solution:
+            print(f"\t{el}")
+        print("\n") 
+        print("%%%%%%%%%%%%%%%%%%%%%%%%%%%")
+        print(f"nn_input_idx_to_tour:")
+        for el in mdvrp.nn_input_idx_to_tour:
+            print(f"\t{el}")
+        print("\n") 
+        print("\n") 
+        
+        result = mdvrp._rebuild_idx_mapping()
+        known_result = [
+                [[[0, 0, 0]], 0],
+                [[[1, 0, 1]], 0],
+                [[[2, 0, 2]], 0],
+                [[[3, 0, 3]], 0],
+                [[[19, 3, 4]], 0],
+                [[[16, 4, 5]], 0],
+                [[[17, 9, 6]], 0],
+                [[[7, 6, 7]], 0],
+                [[[20, 9, 8], [5, 5, None], [1, 0, 1]], 0],
+                [[[3, 0, 3], [18, 3, 9]], 1],
+                [[[13, 3, 10]], 0]]
+
+        self.assertEqual(result, known_result)

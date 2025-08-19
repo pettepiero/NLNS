@@ -3,10 +3,11 @@
 import torch
 import numpy as np
 from vrp import vrp_problem
+from vrp import mdvrp_problem
 import torch.nn.functional as F
 
 
-def _actor_model_forward(actor, instances, static_input, dynamic_input, config, vehicle_capacity):
+def _actor_model_forward(actor, instances, static_input, dynamic_input, config, vehicle_capacity, rng=None):
     batch_size = static_input.shape[0]
     tour_idx, tour_logp = [], []
 
@@ -17,14 +18,18 @@ def _actor_model_forward(actor, instances, static_input, dynamic_input, config, 
     iter = 0
     while not instance_repaired.all():
         iter += 1
-
+        print(f"\n\n ITER: {iter}")
         # if origin_idx == 0 select the next tour end that serves as the origin at random
         for i, instance in enumerate(instances):
             if origin_idx[i] == 0 and not instance_repaired[i]:
+                if rng is not None:
+                    origin_idx[i] = rng.choice(instance.open_nn_input_idx, 1).item()
                 origin_idx[i] = np.random.choice(instance.open_nn_input_idx, 1).item()
 
-        mask = vrp_problem.get_mask(origin_idx, dynamic_input, instances, config, vehicle_capacity).to(
-            config.device).float()
+        if config.problem_type == 'mdvrp':
+            mask = mdvrp_problem.get_mask(origin_idx, dynamic_input, instances, config, vehicle_capacity).to(config.device).float()
+        else:
+            mask = vrp_problem.get_mask(origin_idx, dynamic_input, instances, config, vehicle_capacity).to(config.device).float()
 
         # Rescale customer demand based on vehicle capacity
         dynamic_input_float = dynamic_input.float()
@@ -58,7 +63,13 @@ def _actor_model_forward(actor, instances, static_input, dynamic_input, config, 
             idx_to = ptr_np[i]
             if idx_from == 0 and idx_to == 0:  # No need to update in this case
                 continue
-
+            print("#####################################################################")
+            print("#####################################################################")
+            print(f"\t\t INSTANCE {i}")
+            print(f"\tDEBUG: current solution:")
+            for el in instance.solution:
+                print(f"\t{el}")
+            print("\n")
             nn_input_update, cur_nn_input_idx = instance.do_action(idx_from, idx_to)  # Connect origin to select point
 
             for s in nn_input_update:
@@ -94,7 +105,7 @@ def _critic_model_forward(critic, static_input, dynamic_input, batch_capacity):
     return critic.forward(static_input, dynamic_input_float).view(-1)
 
 
-def repair(instances, actor, config, critic=None):
+def repair(instances, actor, config, critic=None, rng=None):
     nb_input_points = max([instance.get_max_nb_input_points() for instance in instances])  # Max. input points of batch
     batch_size = len(instances)
 
@@ -115,6 +126,6 @@ def repair(instances, actor, config, critic=None):
     if critic is not None:
         cost_estimate = _critic_model_forward(critic, static_input, dynamic_input, vehicle_capacity)
 
-    tour_idx, tour_logp = _actor_model_forward(actor, instances, static_input, dynamic_input, config, vehicle_capacity)
+    tour_idx, tour_logp = _actor_model_forward(actor, instances, static_input, dynamic_input, config, vehicle_capacity, rng)
 
     return tour_idx, tour_logp, cost_estimate

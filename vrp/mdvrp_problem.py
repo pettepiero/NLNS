@@ -457,8 +457,12 @@ class MDVRPInstance():
         pos_from = self.nn_input_idx_to_tour[id_from][1]  # Position of the location that should be connected in tour_from
         pos_to = self.nn_input_idx_to_tour[id_to][1]  # Position of the location that should be connected in tour_to
 
-        nn_input_update = []  # Instead of recalculating the tensor representation, we only compute an update description.
-        # This improves performance.
+        print(f"\tself.nn_input_idx_to_tour:")
+        for el in self.nn_input_idx_to_tour: 
+            print(f"\t{el}")
+        print(f"\ttour_from: {tour_from}, passed id_from: {id_from}")
+        print(f"\ttour_to: {tour_to}, passed id_to: {id_to}")
+        print(f"\t**************************************************************************\n")
 
         # Exchange tour_from with tour_to or invert order of the tours. This reduces the number of cases that need
         # to be considered in the following.
@@ -479,6 +483,9 @@ class MDVRPInstance():
         # Now we only need to consider two cases 1) Connecting an incomplete tour with more than one location
         # to an incomplete tour with more than one location 2) Connecting an incomplete tour (single
         # or multiple locations) to incomplete tour consisting of a single location
+
+        nn_input_update = []  # Instead of recalculating the tensor representation, we only compute an update description.
+        # This improves performance.
 
         # Case 1
         if len(tour_from) > 1 and len(tour_to) > 1:
@@ -518,6 +525,9 @@ class MDVRPInstance():
                         self.solution.remove(t)
                         break
                 else:
+                    print(f"ERROR: self.solution:")
+                    for el in self.solution:
+                        print(el)
                     raise ValueError(f"{tour_to} not found in self.solution")
                 #self.solution.remove(tour_to)
                 # Generate input update
@@ -550,7 +560,34 @@ class MDVRPInstance():
                 self.open_nn_input_idx.remove(update[0])
 
         self.incomplete_tours = self._get_incomplete_tours()
+        self.nn_input_idx_to_tour = self._rebuild_idx_mapping()
+        print(f"\n\nDEBUG: self.nn_input_idx_to_tour:")
+        for el in self.nn_input_idx_to_tour:
+            print(f"\t{el}")
         return nn_input_update, tour_from[-1][2]
+
+    def _rebuild_idx_mapping(self):
+        len_input = self.get_max_nb_input_points()
+
+        result = [None]*len_input
+        for idx, d in enumerate(self.depot_indices):
+            result[idx] = [self.solution[idx], 0]
+        i = self.n_depots
+
+        for tour in self.incomplete_tours:
+            if len(tour) == 1:
+                result[i] = [tour, 0]
+                i+=1
+            else:
+                if tour[0][0] not in self.depot_indices:
+                    result[i] = [tour, 0]
+                    i+=1
+                if tour[-1][0] not in self.depot_indices:
+                    result[i] = [tour, len(tour) -1]
+                    i+=1
+
+        return result
+
 
     def verify_solution(self, config):
         """Verify that a feasible solution has been found."""
@@ -598,7 +635,8 @@ class MDVRPInstance():
 def get_mask(origin_nn_input_idx, dynamic_input, instances, config, capacity):
     """ Returns a mask for the current nn_input"""
     batch_size = origin_nn_input_idx.shape[0]
-
+    #debug
+    print(f"DEBUG: passed origin_nn_input_idx: {origin_nn_input_idx}")
     # Start with all used input positions (i.e. all non-zero ones)
     mask = (dynamic_input[:, :, 1] != 0).cpu().long().numpy()
 

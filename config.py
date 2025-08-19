@@ -5,11 +5,13 @@ def get_config():
     parser = argparse.ArgumentParser(description='Neural Large Neighborhood Search')
 
     parser.add_argument('--mode', default='train', type=str, choices=['train', 'eval_single', 'eval_batch', 'multi_depot'])
+    parser.add_argument('--problem_type', type=str, default="vrp", choices=['vrp', 'mdvrp'])
     parser.add_argument('--output_path', type=str, default="")
     parser.add_argument('--validation_seed', default=0, type=int)
     parser.add_argument('--device', default='cuda', type=str)
     parser.add_argument('--round_distances', default=False, action='store_true')
     parser.add_argument('--allow_split_delivery', dest='split_delivery', default=False, action='store_true')
+    parser.add_argument('--seed', default=None, type=int)
 
     # Training
     parser.add_argument('--actor_lr', default=1e-4, type=float)
