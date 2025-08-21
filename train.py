@@ -11,7 +11,7 @@ import repair
 import main
 from vrp.data_utils import create_dataset
 from search import LnsOperatorPair
-
+from tqdm import trange
 
 def train_nlns(actor, critic, run_id, config):
     rng = np.random.default_rng(config.seed)
@@ -35,8 +35,7 @@ def train_nlns(actor, critic, run_id, config):
     start_time = datetime.datetime.now()
 
     logging.info("Starting training...")
-    for batch_idx in range(1, config.nb_train_batches + 1):
-        #print(f"\n\tDEBUG: batch_idx = {batch_idx}")
+    for batch_idx in trange(1, config.nb_train_batches + 1):
         # Get a batch of training instances from the training set. Training instances are generated in advance, because
         # generating them is expensive.
         training_set_batch_idx = batch_idx % config.nb_batches_training_set
@@ -87,7 +86,7 @@ def train_nlns(actor, critic, run_id, config):
 
         # Evaluate and save model every 5000 batches
         if batch_idx % 5000 == 0 or batch_idx == config.nb_train_batches:
-            mean_costs = lns_validation_search(validation_instances, actor, config)
+            mean_costs = lns_validation_search(validation_instances, actor, config, rng)
             model_data = {
                 'parameters': actor.state_dict(),
                 'model_name': "VrpActorModel",
@@ -122,11 +121,11 @@ def train_nlns(actor, critic, run_id, config):
     return incumbent_model_path
 
 
-def lns_validation_search(validation_instances, actor, config):
+def lns_validation_search(validation_instances, actor, config, rng):
     validation_instances_copies = [deepcopy(instance) for instance in validation_instances]
     actor.eval()
     operation = LnsOperatorPair(actor, config.lns_destruction, config.lns_destruction_p)
     costs, _ = lns_batch_search(validation_instances_copies, config.lns_max_iterations,
-                                config.lns_timelimit_validation, [operation], config)
+                                config.lns_timelimit_validation, [operation], config, rng)
     actor.train()
     return np.mean(costs)

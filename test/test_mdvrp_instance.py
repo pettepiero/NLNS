@@ -129,10 +129,10 @@ class MDVRP_instance_test(unittest.TestCase):
 
     def test_destroy_point_based(self):
         self.mdvrp_instance.create_initial_solution()
-
+        rng = np.random.default_rng()
         point = np.array([[0.14365113, 0.5307886 ]])
         p = 0.1
-        self.mdvrp_instance.destroy_point_based(p=p, point=point)
+        self.mdvrp_instance.destroy_point_based(p=p, point=point, rng=rng)
         sol = self.mdvrp_instance.solution
         incomplete_tours = self.mdvrp_instance.incomplete_tours
         self.assertIn(member=[[10, 2, None]], container=sol)
@@ -140,7 +140,7 @@ class MDVRP_instance_test(unittest.TestCase):
 
         point = np.array([[0.36975687, 0.91092584]])
         p = 0.1
-        self.mdvrp_instance.destroy_point_based(p=p, point=point)
+        self.mdvrp_instance.destroy_point_based(p=p, point=point, rng=rng)
         sol = self.mdvrp_instance.solution
         incomplete_tours = self.mdvrp_instance.incomplete_tours
         self.assertIn(member=[[20, 9, None]], container=sol)
@@ -148,7 +148,7 @@ class MDVRP_instance_test(unittest.TestCase):
 
         point = np.array([[0.79329399, 0.1709594 ]])
         p = 0.1
-        self.mdvrp_instance.destroy_point_based(p=p, point=point)
+        self.mdvrp_instance.destroy_point_based(p=p, point=point, rng=rng)
         sol = self.mdvrp_instance.solution
         incomplete_tours = self.mdvrp_instance.incomplete_tours
         self.assertIn(member=[[13, 3, None]], container=sol)

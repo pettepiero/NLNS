@@ -9,7 +9,7 @@ from vrp.data_utils import create_dataset, read_instances_pkl
 EMA_ALPHA = 0.2
 
 
-def lns_batch_search(instances, max_iterations, timelimit, operator_pairs, config):
+def lns_batch_search(instances, max_iterations, timelimit, operator_pairs, config, rng):
     if len(instances) % config.lns_batch_size != 0:
         raise Exception("Instance set size must be multiple of lns_batch_size for batch search.")
 
@@ -39,7 +39,7 @@ def lns_batch_search(instances, max_iterations, timelimit, operator_pairs, confi
         start_time_destroy = time.time()
 
         # Destroy instances
-        search.destroy_instances(instances, destroy_procedure, p_destruction)
+        search.destroy_instances(rng, instances, destroy_procedure, p_destruction)
 
         # Repair instances
         for i in range(int(len(instances) / config.lns_batch_size)):
@@ -74,6 +74,7 @@ def lns_batch_search(instances, max_iterations, timelimit, operator_pairs, confi
 
 
 def _lns_batch_search_job(args):
+    rng = np.random.default_rng()
     (i, test_size, config, model_path) = args
     if config.instance_path is None:
         instances = create_dataset(size=test_size, config=config, seed=config.validation_seed + 1 + i)
@@ -86,7 +87,7 @@ def _lns_batch_search_job(args):
         instance.create_initial_solution()
 
     costs, nb_iterations = lns_batch_search(instances, config.lns_max_iterations, config.lns_timelimit, lns_operations,
-                                            config)
+                                            config, rng)
 
     return i, costs, nb_iterations
 

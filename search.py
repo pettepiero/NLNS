@@ -9,6 +9,7 @@ import glob
 import search_batch
 from actor import VrpActorModel
 from dummy_model import dummy_model
+from vrp.mdvrp_problem import MDVRPInstance
 
 class LnsOperatorPair:
     def __init__(self, model, destroy_procedure, p_destruction):

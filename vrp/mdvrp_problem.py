@@ -398,19 +398,19 @@ class MDVRPInstance():
                     destroyed_location_idx.append(tour[-1][0])
                     i += 1
 
-        self.open_nn_input_idx = []
-        for tour in incomplete_tours:
-            if len(tour)>1:
-               # if first end not depot
-                if tour[0][0] not in self.depot_indices:
-                    self.open_nn_input_idx.append(tour[0][2])
-                if tour[-1][0] not in self.depot_indices:
-                    self.open_nn_input_idx.append(tour[-1][2])
-            if len(tour) == 1:
-                if tour[0][0] not in self.depot_indices:
-                    self.open_nn_input_idx.append(tour[0][2])
+       # self.open_nn_input_idx = []
+       # for tour in incomplete_tours:
+       #     if len(tour)>1:
+       #        # if first end not depot
+       #         if tour[0][0] not in self.depot_indices:
+       #             self.open_nn_input_idx.append(tour[0][2])
+       #         if tour[-1][0] not in self.depot_indices:
+       #             self.open_nn_input_idx.append(tour[-1][2])
+       #     if len(tour) == 1:
+       #         if tour[0][0] not in self.depot_indices:
+       #             self.open_nn_input_idx.append(tour[0][2])
 
-        #self.open_nn_input_idx = list(range(self.n_depots, i))
+        self.open_nn_input_idx = list(range(self.n_depots, i))
         self.nn_input_idx_to_tour = network_input_idx_to_tour
         return nn_input[:, :2], nn_input[:, 2:]
 
