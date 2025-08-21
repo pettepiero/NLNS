@@ -36,7 +36,7 @@ def train_nlns(actor, critic, run_id, config):
 
     logging.info("Starting training...")
     for batch_idx in range(1, config.nb_train_batches + 1):
-        print(f"\n\tDEBUG: batch_idx = {batch_idx}")
+        #print(f"\n\tDEBUG: batch_idx = {batch_idx}")
         # Get a batch of training instances from the training set. Training instances are generated in advance, because
         # generating them is expensive.
         training_set_batch_idx = batch_idx % config.nb_batches_training_set
@@ -44,7 +44,7 @@ def train_nlns(actor, critic, run_id, config):
                         training_set[training_set_batch_idx * batch_size: (training_set_batch_idx + 1) * batch_size]]
 
         # Destroy and repair the set of instances
-        destroy_instances(tr_instances, config.lns_destruction, config.lns_destruction_p)
+        destroy_instances(rng, tr_instances, config.lns_destruction, config.lns_destruction_p)
         costs_destroyed = [instance.get_costs_incomplete(config.round_distances) for instance in tr_instances]
         tour_indices, tour_logp, critic_est = repair.repair(tr_instances, actor, config, critic, rng)
         costs_repaired = [instance.get_costs(config.round_distances) for instance in tr_instances]

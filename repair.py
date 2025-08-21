@@ -7,7 +7,7 @@ from vrp import mdvrp_problem
 import torch.nn.functional as F
 
 
-def _actor_model_forward(actor, instances, static_input, dynamic_input, config, vehicle_capacity, rng=None):
+def _actor_model_forward(actor, instances, static_input, dynamic_input, config, vehicle_capacity, rng):
     batch_size = static_input.shape[0]
     tour_idx, tour_logp = [], []
 
@@ -18,13 +18,10 @@ def _actor_model_forward(actor, instances, static_input, dynamic_input, config, 
     iter = 0
     while not instance_repaired.all():
         iter += 1
-        print(f"\n\n ITER: {iter}")
         # if origin_idx == 0 select the next tour end that serves as the origin at random
         for i, instance in enumerate(instances):
             if origin_idx[i] == 0 and not instance_repaired[i]:
-                if rng is not None:
-                    origin_idx[i] = rng.choice(instance.open_nn_input_idx, 1).item()
-                origin_idx[i] = np.random.choice(instance.open_nn_input_idx, 1).item()
+                origin_idx[i] = rng.choice(instance.open_nn_input_idx, 1).item()
 
         if config.problem_type == 'mdvrp':
             mask = mdvrp_problem.get_mask(origin_idx, dynamic_input, instances, config, vehicle_capacity).to(config.device).float()
@@ -61,17 +58,9 @@ def _actor_model_forward(actor, instances, static_input, dynamic_input, config, 
         for i, instance in enumerate(instances):
             idx_from = origin_idx[i].item()
             idx_to = ptr_np[i]
-            if idx_from == 0 and idx_to == 0:  # No need to update in this case
+            if idx_from in instance.depot_indices and idx_to in instance.depot_indices:  # No need to update in this case
                 continue
-            print("#####################################################################")
-            print("#####################################################################")
-            print(f"\t\t INSTANCE {i}")
-            print(f"\tDEBUG: current solution:")
-            for el in instance.solution:
-                print(f"\t{el}")
-            print("\n")
             nn_input_update, cur_nn_input_idx = instance.do_action(idx_from, idx_to)  # Connect origin to select point
-
             for s in nn_input_update:
                 s.insert(0, i)
                 nn_input_updates.append(s)
@@ -84,9 +73,10 @@ def _actor_model_forward(actor, instances, static_input, dynamic_input, config, 
                 origin_idx[i] = cur_nn_input_idx  # Otherwise, set to tour end of the connect tour
 
         # Update network input
-        nn_input_update = np.array(nn_input_updates, dtype=np.long)
-        nn_input_update = torch.from_numpy(nn_input_update).to(config.device).long()
-        dynamic_input[nn_input_update[:, 0], nn_input_update[:, 1]] = nn_input_update[:, 2:]
+        if len(nn_input_updates) > 0:
+            nn_input_update = np.array(nn_input_updates, dtype=np.long)
+            nn_input_update = torch.from_numpy(nn_input_update).to(config.device).long()
+            dynamic_input[nn_input_update[:, 0], nn_input_update[:, 1]] = nn_input_update[:, 2:]
 
         logp = logp * (1. - torch.from_numpy(instance_repaired).float().to(config.device))
         tour_logp.append(logp.unsqueeze(1))
@@ -119,13 +109,12 @@ def repair(instances, actor, config, critic=None, rng=None):
 
     static_input = torch.from_numpy(static_input).to(config.device).float()
     dynamic_input = torch.from_numpy(dynamic_input).to(config.device).long()
-
     vehicle_capacity = instances[0].capacity # Assumes that the vehicle capcity is identical for all instances of the batch
 
     cost_estimate = None
     if critic is not None:
         cost_estimate = _critic_model_forward(critic, static_input, dynamic_input, vehicle_capacity)
-
+    
     tour_idx, tour_logp = _actor_model_forward(actor, instances, static_input, dynamic_input, config, vehicle_capacity, rng)
 
     return tour_idx, tour_logp, cost_estimate

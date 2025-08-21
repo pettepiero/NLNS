@@ -233,23 +233,20 @@ class MDVRPInstance():
 
         self.solution = st
 
-    def destroy_random(self, p):
+    def destroy_random(self, p, rng):
         """Random destroy. Select customers that should be removed at random and remove them from tours."""
-        customers_to_remove_idx = np.random.choice(range(1, self.nb_customers + 1), int(self.nb_customers * p), replace=True)
+        customers_to_remove_idx = rng.choice(range(1, self.nb_customers + 1), int(self.nb_customers * p), replace=True)
                 #a=self.customer_indices,
                 #size=int(self.nb_customers * p), # degree of destruction
                 #replace=False)
         self.destroy(customers_to_remove_idx)
 
-    def destroy_point_based(self, p, point=None, rng=None):
+    def destroy_point_based(self, p, rng, point=None):
         """Point based destroy. Select customers that should be removed based on their distance to a random point
          and remove them from tours."""
         nb_customers_to_remove = int(self.nb_customers * p)
         if point is None:
-            if rng is None:
-                random_point = np.random.rand(1, 2)
-            else:
-                random_point = rng.random((1,2))
+            random_point = rng.random((1,2))
         else:
             random_point = point
         customer_locations = self.locations[self.customer_indices]
@@ -258,7 +255,7 @@ class MDVRPInstance():
         closest_customers_idx = np.argsort(dist)[:nb_customers_to_remove] + self.n_depots 
         self.destroy(closest_customers_idx)
 
-    def destroy_tour_based(self, p):
+    def destroy_tour_based(self, p, rng):
         """Tour based destroy. Remove all tours closest to a randomly selected point from a solution."""
         # Make a dictionary that maps customers to tours
         customer_to_tour = {}
@@ -272,7 +269,8 @@ class MDVRPInstance():
         nb_customers_to_remove = int(self.nb_customers * p)  # Number of customer that should be removed
         nb_removed_customers = 0
         tours_to_remove_idx = []
-        random_point = np.random.rand(1, 2)  # Randomly selected point
+        #random_point = np.random.rand(1, 2)  # Randomly selected point
+        random_point = rng.random((1,2))
         dist = np.sum((self.locations[1:] - random_point) ** 2, axis=1)
         closest_customers_idx = np.argsort(dist) + 1
 
@@ -322,6 +320,9 @@ class MDVRPInstance():
     def get_max_nb_input_points(self):
         """For the current instance, returns the number of input vectors required to describe the
         incomplete solution. """
+        if self.incomplete_tours is None:
+            self.incomplete_tours = self._get_incomplete_tours()
+
         incomplete_tours = self.incomplete_tours
         nb = self.n_depots  # input point for each depot
         for tour in incomplete_tours:
@@ -358,6 +359,8 @@ class MDVRPInstance():
         i = self.n_depots 
         destroyed_location_idx = []
 
+        if self.incomplete_tours is None:
+            self.incomplete_tours = self._get_incomplete_tours()
         incomplete_tours = self.incomplete_tours
         for tour in incomplete_tours:
             # Create an input for a tour consisting of a single customer
@@ -413,11 +416,13 @@ class MDVRPInstance():
 
     def _get_network_input_update_for_tour(self, tour, new_demand):
         """Returns an nn_input update for the tour tour. The demand of the tour is updated to new_demand"""
+
         nn_input_idx_start = tour[0][2]  # Idx of the nn_input for the first location in tour
         nn_input_idx_end = tour[-1][2]  # Idx of the nn_input for the last location in tour
 
         # If the tour stars and ends at the depot, no update is required
-        if nn_input_idx_start == 0 and nn_input_idx_end == 0:
+        if tour[-1][0] in self.depot_indices and tour[0][0] in self.depot_indices:
+            #assert tour[-1][0] == tour[0][0] #added by piero: check that tour starts and end at same depot
             return []
 
         nn_input_update = []
@@ -435,7 +440,7 @@ class MDVRPInstance():
                     # update first location
                     self.nn_input_idx_to_tour[nn_input_idx_start] = [tour, 0]
                 # Last location in the tour is not the depot
-                elif tour[-1][0] in self.depot_indices:
+                elif tour[-1][0] not in self.depot_indices:
                     nn_input_update.append([nn_input_idx_end, new_demand, 3])
                     # update last location
                     self.nn_input_idx_to_tour[nn_input_idx_end] = [tour, len(tour) - 1]
@@ -456,14 +461,6 @@ class MDVRPInstance():
         tour_to = self.nn_input_idx_to_tour[id_to][0]  # to this tour.
         pos_from = self.nn_input_idx_to_tour[id_from][1]  # Position of the location that should be connected in tour_from
         pos_to = self.nn_input_idx_to_tour[id_to][1]  # Position of the location that should be connected in tour_to
-
-        print(f"\tself.nn_input_idx_to_tour:")
-        for el in self.nn_input_idx_to_tour: 
-            print(f"\t{el}")
-        print(f"\ttour_from: {tour_from}, passed id_from: {id_from}")
-        print(f"\ttour_to: {tour_to}, passed id_to: {id_to}")
-        print(f"\t**************************************************************************\n")
-
         # Exchange tour_from with tour_to or invert order of the tours. This reduces the number of cases that need
         # to be considered in the following.
         if len(tour_from) > 1 and len(tour_to) > 1:
@@ -493,7 +490,7 @@ class MDVRPInstance():
             assert combined_demand <= self.capacity  # This is ensured by the masking schema
 
             # The two incomplete tours are combined to one (in)complete tour. All network inputs associated with the
-            # two connected tour ends are set to 0
+            # two connected tour ends are set to 0 (deactivated)
             nn_input_update.append([tour_from[-1][2], 0, 0])
             nn_input_update.append([tour_to[0][2], 0, 0])
             tour_from.extend(tour_to)
@@ -534,6 +531,7 @@ class MDVRPInstance():
                 nn_input_update.extend(self._get_network_input_update_for_tour(tour_from, combined_demand))
             # The new tour has a total demand that is larger than the vehicle capacity
             else:
+                raise NotImplementedError #think about this (split delivery?)
                 nn_input_update.append([tour_from[-1][2], 0, 0])
                 if len(tour_from) > 1 and tour_from[0][0] not in self.depot_indices:
                     nn_input_update.append([tour_from[0][2], 0, 0])
@@ -545,7 +543,7 @@ class MDVRPInstance():
                 if tour_from[0][0] not in self.depot_indices:
                     tour_from.insert(0, [0, 0, 0])
                 tour_to[0][1] = unfulfilled_demand  # Update demand of tour_to
-
+                # Generate input update
                 nn_input_update.extend(self._get_network_input_update_for_tour(tour_to, unfulfilled_demand))
 
         # Add depot tours to the solution tours if they were removed
@@ -559,11 +557,6 @@ class MDVRPInstance():
             if update[2] == 0 and update[0] not in self.depot_indices:
                 self.open_nn_input_idx.remove(update[0])
 
-        self.incomplete_tours = self._get_incomplete_tours()
-        self.nn_input_idx_to_tour = self._rebuild_idx_mapping()
-        print(f"\n\nDEBUG: self.nn_input_idx_to_tour:")
-        for el in self.nn_input_idx_to_tour:
-            print(f"\t{el}")
         return nn_input_update, tour_from[-1][2]
 
     def _rebuild_idx_mapping(self):
@@ -629,6 +622,11 @@ class MDVRPInstance():
         new_instance.solution = solution_copy
         new_instance.costs_memory = self.costs_memory
 
+        if self.incomplete_tours is not None:
+            new_instance.incomplete_tours = [ [x[:] for x in tour] for tour in self.incomplete_tours ]
+        else:
+            new_instance.incomplete_tours = None
+
         return new_instance
 
 
@@ -636,7 +634,7 @@ def get_mask(origin_nn_input_idx, dynamic_input, instances, config, capacity):
     """ Returns a mask for the current nn_input"""
     batch_size = origin_nn_input_idx.shape[0]
     #debug
-    print(f"DEBUG: passed origin_nn_input_idx: {origin_nn_input_idx}")
+    #print(f"DEBUG: passed origin_nn_input_idx: {origin_nn_input_idx}")
     # Start with all used input positions (i.e. all non-zero ones)
     mask = (dynamic_input[:, :, 1] != 0).cpu().long().numpy()
 

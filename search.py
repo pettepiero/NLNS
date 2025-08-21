@@ -11,21 +11,20 @@ from actor import VrpActorModel
 from dummy_model import dummy_model
 
 class LnsOperatorPair:
-
     def __init__(self, model, destroy_procedure, p_destruction):
         self.model = model
         self.destroy_procedure = destroy_procedure
         self.p_destruction = p_destruction
 
 
-def destroy_instances(instances, destroy_procedure=None, destruction_p=None):
+def destroy_instances(rng, instances, destroy_procedure=None, destruction_p=None):
     for instance in instances:
         if destroy_procedure == "R":
-            instance.destroy_random(destruction_p)
+            instance.destroy_random(destruction_p, rng=rng)
         elif destroy_procedure == "P":
-            instance.destroy_point_based(destruction_p)
+            instance.destroy_point_based(destruction_p, rng=rng)
         elif destroy_procedure == "T":
-            instance.destroy_tour_based(destruction_p)
+            instance.destroy_tour_based(destruction_p, rng=rng)
 
 
 def load_operator_pairs(path, config):
