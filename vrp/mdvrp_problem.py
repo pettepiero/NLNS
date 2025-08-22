@@ -632,39 +632,64 @@ class MDVRPInstance():
 
 def get_mask(origin_nn_input_idx, dynamic_input, instances, config, capacity):
     """ Returns a mask for the current nn_input"""
-    batch_size = origin_nn_input_idx.shape[0]
-    #debug
-    #print(f"DEBUG: passed origin_nn_input_idx: {origin_nn_input_idx}")
-    # Start with all used input positions (i.e. all non-zero ones)
-    mask = (dynamic_input[:, :, 1] != 0).cpu().long().numpy()
+    device = dynamic_input.device
+    batch_size, N, _ = dynamic_input.shape
+
+    # Make sure origin indices are a 1-D torch.LongTensor on the right device
+    origin_idx = torch.as_tensor(origin_nn_input_idx, device=device, dtype=torch.long).view(-1)
+    assert origin_idx.size(0) == batch_size, f"origin_idx batch {origin_idx.size(0)} != dynamic_input batch {batch_size}"
+
+    # Start with all 'alive' input positions (i.e. all non-zero ones)
+    #mask = (dynamic_input[:, :, 1] != 0).cpu().long().numpy()
+    mask = (dynamic_input[:, :, 1] != 0).clone()
 
 
     # FIRST PART: avoid connecting both ends of the same tour or connecting to itself (creating cycles)
     for i in range(batch_size):
+        inst = instances[i]
+        depot_indices = inst.depot_indices
+
         idx_from = origin_nn_input_idx[i]   # for the i-th instance in the batch, this is the index of the tour end
                                             # we want to connect from
-        origin_tour = instances[i].nn_input_idx_to_tour[idx_from][0]
-        origin_pos = instances[i].nn_input_idx_to_tour[idx_from][1]
 
         # Find the start of the tour in the nn input
-        # e.g. for the tour [2, 3] two entries in nn input exists
-        # This is needed to avoid connecting a tour to itself
+        origin_tour, origin_pos = inst.nn_input_idx_to_tour[idx_from]
+
+        # forbid connecting origin to itself & to the opposite end of the same tour
+        mask[i, idx_from] = False
         if origin_pos == 0: #if origin is the start then fetch the end
             idx_same_tour = origin_tour[-1][2]
         else: # if origin is the end then fetch the start
             idx_same_tour = origin_tour[0][2]
+        mask[i, idx_same_tour] = False 
 
-        mask[i, idx_same_tour] = 0
+        # Same depot rules:
+        # determine if origin tour already contains a depot
+        home_depot = get_depot(origin_tour, depot_indices)
+        if home_depot is not None:
+            # allow connecting only to home_depot among depot nodes
+            mask[i, depot_indices] = False
+            mask[i, depot_indices] = True
 
-        # Do not allow origin location = destination location
-        mask[i, idx_from] = 0
-        
-        # allow to go to depots
-        depot_indices = instances[i].depot_indices
-        mask[i, depot_indices] = 1
+            #forbid connecting to another incomplete tour that already contains a different depot
+            # here each candidate j represents a tour end
+            for j in range(N):
+                if not mask[i, j]:
+                    continue
+                cand_tour, _ = inst.nn_input_idx_to_tour[j]
+                if cand_tour is None: #padding beyond current nn inputs
+                    mask[i, j] = False
+                    continue
+                cand_depot = get_depot(cand_tour, depot_indices)
+                if cand_depot is not None:
+                    if cand_depot != home_depot:
+                        mask[i, j] = False
+        else:
+            # the origin tour has not yet touched any depot:
+            # allow all depots for now
+            mask[i, depot_indices] = True
 
-    mask = torch.from_numpy(mask)
-
+    # capacity constraints
     origin_tour_demands = dynamic_input[torch.arange(batch_size), origin_nn_input_idx, 0]
     combined_demand = origin_tour_demands.unsqueeze(1).expand(batch_size, dynamic_input.shape[1]) + dynamic_input[:, :,
                                                                                                     0]
@@ -675,11 +700,22 @@ def get_mask(origin_nn_input_idx, dynamic_input, instances, config, capacity):
 
         # If the origin tour consists of multiple customers mask all tours with multiple customers where
         # the combined demand is > 1
-        mask[multiple_customer_tour & (combined_demand > capacity) & (dynamic_input[:, :, 1] > 1)] = 0
+        #mask[multiple_customer_tour & (combined_demand > capacity) & (dynamic_input[:, :, 1] > 1)] = 0
+        mask &= ~(multiple_customer_tour & (combined_demand > capacity) & (dynamic_input[:, :, 1] > 1))
 
         # If the origin tour consists of a single customer mask all tours with demand is >= 1
-        mask[(~multiple_customer_tour) & (dynamic_input[:, :, 0] >= capacity)] = 0
+        #mask[(~multiple_customer_tour) & (dynamic_input[:, :, 0] >= capacity)] = 0
+        mask &= ~(~multiple_customer_tour & (dynamic_input[:, :, 0] >= capacity))
+
     else:
-        mask[combined_demand > capacity] = 0
+        #mask[combined_demand > capacity] = 0
+        mask &= ~(combined_demand > capacity)
 
     return mask
+
+def get_depot(tour: list, depot_indices: list):
+    has_depot = (tour[0][0] in depot_indices) or (tour[-1][0] in depot_indices)
+    if has_depot:
+        return tour[0][0] if tour[0][0] in depot_indices else tour[-1][0]
+    else:
+        return None

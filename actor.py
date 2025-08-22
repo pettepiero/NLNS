@@ -57,7 +57,9 @@ class Pointer(nn.Module):
         enc_attn = self.encoder_attn(all_hidden, origin_hidden.transpose(2, 1).squeeze(1))
         context = enc_attn.bmm(all_hidden.permute(0, 2, 1))
 
-        input = torch.cat((origin_hidden.squeeze(), context.squeeze()), dim=1)
+        #input = torch.cat((origin_hidden.squeeze(), context.squeeze()), dim=1)
+        assert origin_hidden.dim() >= 2 and context.dim() >= 2, "Pointer expects batched tensors"
+        input = torch.cat((origin_hidden.flatten(1), context.flatten(1)), dim=1)  # (B, 2H)
 
         output = F.relu(self.fc1(input))
         output = F.relu(self.fc2(output))
@@ -84,10 +86,18 @@ class VrpActorModel(nn.Module):
             if len(p.shape) > 1:
                 nn.init.xavier_uniform_(p)
 
-    def forward(self, static_input, dynamic_input_float, origin_static_input, origin_dynamic_input_float, mask):
+    def forward(self, static_input, dynamic_input_float, origin_static_input, origin_dynamic_input_float, mask, depot_mask):
         # Set the input feature values of already visited customers (demand == 0) to zero
-        active_inputs = dynamic_input_float[:, 1:, 1] > 0
-        static_input[:, 1:, :] = static_input[:, 1:, :] * active_inputs.unsqueeze(2).float()
+        # customers are all but depots
+        is_customer = ~depot_mask
+        is_active = dynamic_input_float[:, :, 1] > 0
+
+        keep = depot_mask | (is_customer & is_active)
+        keep3 = keep.unsqueeze(2).float()
+        static_input = static_input * keep3
+
+        #active_inputs = dynamic_input_float[:, 1:, 1] > 0
+        #static_input[:, 1:, :] = static_input[:, 1:, :] * active_inputs.unsqueeze(2).float()
 
         # Embed inputs
         all_hidden = self.all_embed.forward(

@@ -9,7 +9,13 @@ import torch.nn.functional as F
 
 #def _actor_model_forward(actor, instances, static_input, dynamic_input, config, vehicle_capacity, rng):
 def _actor_model_forward(actor, instances, static_input, dynamic_input, config, vehicle_capacity, rng):
-    batch_size = static_input.shape[0]
+    batch_size, n_points, _ = static_input.shape
+
+    # depot mask per batch. Per instance, the first instance.n_depots indices are depots
+    depot_mask = torch.zeros((batch_size, n_points), dtype=torch.bool, device=config.device)
+    for i, inst in enumerate(instances):
+        depot_mask[i, :inst.n_depots] = True
+
     tour_idx, tour_logp = [], []
 
     instance_repaired = np.zeros(batch_size)
@@ -20,13 +26,14 @@ def _actor_model_forward(actor, instances, static_input, dynamic_input, config, 
         iter += 1
         # if origin_idx == 0 select the next tour end that serves as the origin at random
         for i, instance in enumerate(instances):
-            if origin_idx[i] == 0 and not instance_repaired[i]:
+            if (origin_idx[i] == 0 or int(origin_idx[i]) in instance.depot_indices) and not instance_repaired[i]:
                 origin_idx[i] = np.random.choice(instance.open_nn_input_idx, 1).item()
                 #origin_idx[i] = rng.choice(instance.open_nn_input_idx, 1).item()
 
         if config.problem_type == 'mdvrp':
-            mask = mdvrp_problem.get_mask(origin_idx, dynamic_input, instances, config, vehicle_capacity).to(config.device).float()
+            mask = mdvrp_problem.get_mask(origin_idx, dynamic_input, instances, config, vehicle_capacity).to(config.device).to(config.device)
         else:
+            raise NotImplementedError
             mask = vrp_problem.get_mask(origin_idx, dynamic_input, instances, config, vehicle_capacity).to(config.device).float()
 
         # Rescale customer demand based on vehicle capacity
@@ -37,8 +44,17 @@ def _actor_model_forward(actor, instances, static_input, dynamic_input, config, 
         origin_dynamic_input_float = dynamic_input_float[torch.arange(batch_size), origin_idx]
 
         # Forward pass. Returns a probability distribution over the point (tour end or depot) that origin should be connected to
-        probs = actor.forward(static_input, dynamic_input_float, origin_static_input, origin_dynamic_input_float, mask)
-        probs = F.softmax(probs + mask.log(), dim=1)  # Set prob of masked tour ends to zero
+        probs = actor.forward(
+                static_input                = static_input, 
+                dynamic_input_float         = dynamic_input_float,
+                origin_static_input         = origin_static_input, 
+                origin_dynamic_input_float  = origin_dynamic_input_float, 
+                mask                        = mask,
+                depot_mask                  = depot_mask
+                )
+        probs = probs.masked_fill(~mask, float('-inf'))
+        probs = F.softmax(probs, dim=1)
+        #probs = F.softmax(probs + mask.log(), dim=1)  # Set prob of masked tour ends to zero
 
         if actor.training:
             m = torch.distributions.Categorical(probs)
@@ -96,7 +112,6 @@ def _critic_model_forward(critic, static_input, dynamic_input, batch_capacity):
     return critic.forward(static_input, dynamic_input_float).view(-1)
 
 
-#def repair(instances, actor, config, critic=None, rng=None):
 def repair(instances, actor, config, critic=None, rng=None):
     nb_input_points = max([instance.get_max_nb_input_points() for instance in instances])  # Max. input points of batch
     batch_size = len(instances)
@@ -108,7 +123,6 @@ def repair(instances, actor, config, critic=None, rng=None):
         static_nn_input, dynamic_nn_input = instance.get_network_input(nb_input_points)
         static_input[i] = static_nn_input
         dynamic_input[i] = dynamic_nn_input
-    
     static_input = torch.from_numpy(static_input).to(config.device).float()
     dynamic_input = torch.from_numpy(dynamic_input).to(config.device).long()
     vehicle_capacity = instances[0].capacity # Assumes that the vehicle capcity is identical for all instances of the batch
@@ -116,7 +130,6 @@ def repair(instances, actor, config, critic=None, rng=None):
     cost_estimate = None
     if critic is not None:
         cost_estimate = _critic_model_forward(critic, static_input, dynamic_input, vehicle_capacity)
-    
     tour_idx, tour_logp = _actor_model_forward(actor, instances, static_input, dynamic_input, config, vehicle_capacity, rng)
 
     return tour_idx, tour_logp, cost_estimate
