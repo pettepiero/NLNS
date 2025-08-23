@@ -2,7 +2,7 @@ import numpy as np
 from vrp.vrp_problem import VRPInstance
 from vrp.mdvrp_problem import MDVRPInstance
 import pickle
-from tqdm import trange 
+#from tqdm import trange 
 
 class InstanceBlueprint:
     """Describes the properties of a certain instance type (e.g. number of customers)."""
@@ -46,7 +46,8 @@ def create_dataset(size, config, seed=None, create_solution=False, use_cost_memo
     #if seed is not None:
     #    np.random.seed(seed)
     rng = np.random.default_rng(seed)
-    for i in trange(size):
+    #for i in trange(size):
+    for i in range(size):
         if isinstance(blueprints, list):
             blueprint_rnd_idx = rng.integers(0, len(blueprints), 1).item()
             vrp_instance = generate_Instance(blueprints[blueprint_rnd_idx], use_cost_memory, rng)

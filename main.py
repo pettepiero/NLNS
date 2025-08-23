@@ -24,6 +24,10 @@ import train
 import search
 from actor import VrpActorModel
 from critic import VrpCriticModel
+import multiprocessing
+if multiprocessing.get_start_method(allow_none=True) != "spawn":
+    multiprocessing.set_start_method("spawn", force=True)
+
 
 VERSION = "0.3.0"
 
