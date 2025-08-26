@@ -1,24 +1,48 @@
 import numpy as np
 from vrp.vrp_problem import VRPInstance
 from vrp.mdvrp_problem import MDVRPInstance
+from vrp.mdvrptw_problem import MDVRPTWInstance
 import pickle
-#from tqdm import trange 
+from tqdm import trange 
 
 class InstanceBlueprint:
     """Describes the properties of a certain instance type (e.g. number of customers)."""
-
-    def __init__(self, nb_customers, depot_position, customer_position, nb_customer_cluster, demand_type, demand_min,
-                 demand_max, capacity, grid_size, n_depots=1):
+    def __init__(self, problem_type, nb_customers, depot_position, customer_position, nb_customer_cluster, demand_type, demand_min,
+                 demand_max, capacity, grid_size, n_depots=1, tw_options=None):
+        assert problem_type in ['vrp', 'mdvrp', 'mdvrptw'], f"Unknown problem type '{self.problem_type}'"
+        self.problem_type = problem_type
+        assert nb_customers > 0, "Not enough customers"
         self.nb_customers = nb_customers
+        if self.problem_type == 'vrp':
+            assert n_depots == 1, f"Wrong number of depots for 'vrp': {n_depots}"
+        if self.problem_type == 'mdvrp':
+            assert n_depots > 1, f"Wrong number of depots for 'mdvrp': {n_depots}"
         self.n_depots = n_depots 
+        assert depot_position in ['R', 'C', 'E'], f"Invalid depot position: {depot_position}"
         self.depot_position = depot_position
+        assert customer_position in ['R', 'C', 'RC'], f"Invalid customer position: {customer_position}"
         self.customer_position = customer_position
         self.nb_customers_cluster = nb_customer_cluster
+        assert demand_type in ['inter', 'U', 'SL', 'Q', 'minOrMax', ], f"Invalid demand type: {demand_type}"
         self.demand_type = demand_type
+        assert demand_min > 0, f"Invalid demand_min: {demand_min} <= 0" 
         self.demand_min = demand_min
+        assert demand_max > demand_min, f"demand_max is not greater than demand_min"
         self.demand_max = demand_max
+        assert capacity > 0, f"Invalid capacity: {capacity} <= 0" 
         self.capacity = capacity
         self.grid_size = grid_size
+        
+        # time window specific info
+        if self.problem_type == 'mdvrptw':
+            assert tw_options is not None, f"Missing tw_options for mdvrptw instances"
+            assert isinstance(tw_options, dict), f"Invalid tw_options format: {type(tw_options), not dict}" 
+            assert tw_options.__contains__('tw_min'), f"Invalid tw_options: doesn't contain 'tw_min' key"
+            assert tw_options.__contains__('tw_max'), f"Invalid tw_options: doesn't contain 'tw_max' key"
+            assert tw_options.__contains__('avg_window'), f"Invalid tw_options: doesn't contain 'avg_window' key"
+            #assert tw_options.__contains__('late_coeff'), f"Invalid tw_options: doesn't contain 'late_coeff' key"
+            #assert tw_options.__contains__('early_coeff'), f"Invalid tw_options: doesn't contain 'early_coeff' key"
+            self.tw_options = tw_options
 
 
 def get_blueprint(blueprint_name):
@@ -36,6 +60,9 @@ def get_blueprint(blueprint_name):
     elif instance_type == "MD":
         import vrp.dataset_blueprints.MD
         return vrp.dataset_blueprints.MD.dataset[instance]
+    elif instance_type == "MDTW":
+        import vrp.dataset_blueprints.MDTW
+        return vrp.dataset_blueprints.MDTW.dataset[instance]
     raise Exception('Unknown blueprint instance')
 
 
@@ -43,11 +70,8 @@ def create_dataset(size, config, seed=None, create_solution=False, use_cost_memo
     instances = []
     blueprints = get_blueprint(config.instance_blueprint)
 
-    #if seed is not None:
-    #    np.random.seed(seed)
     rng = np.random.default_rng(seed)
-    #for i in trange(size):
-    for i in range(size):
+    for i in trange(size):
         if isinstance(blueprints, list):
             blueprint_rnd_idx = rng.integers(0, len(blueprints), 1).item()
             vrp_instance = generate_Instance(blueprints[blueprint_rnd_idx], use_cost_memory, rng)
@@ -55,12 +79,12 @@ def create_dataset(size, config, seed=None, create_solution=False, use_cost_memo
             vrp_instance = generate_Instance(blueprints, use_cost_memory, rng)
         instances.append(vrp_instance)
         if create_solution:
-            vrp_instance.create_initial_solution()
+            vrp_instance.create_initial_solution(config, blueprints.tw_options)
     return instances
 
 
 def generate_Instance(blueprint, use_cost_memory, rng):
-    if blueprint.n_depots == 1:
+    if blueprint.problem_type == 'vrp':
         depot_position = get_depot_position(blueprint, rng)
         customer_position = get_customer_position(blueprint, rng)
         demand = get_customer_demand(blueprint, customer_position, rng)
@@ -78,7 +102,7 @@ def generate_Instance(blueprint, use_cost_memory, rng):
         vrp_instance = VRPInstance(blueprint.nb_customers, locations, original_locations, demand, blueprint.capacity,
                                    use_cost_memory)
         return vrp_instance
-    elif blueprint.n_depots > 1: #mdvrp
+    elif (blueprint.problem_type == 'mdvrp') or (blueprint.problem_type == 'mdvrptw'): 
         depot_positions = []
         for d in range(blueprint.n_depots):
             pos = get_depot_position(blueprint, rng)
@@ -90,11 +114,7 @@ def generate_Instance(blueprint, use_cost_memory, rng):
             original_locations.append(pos)
 
         original_locations = np.array(original_locations)
-        #original_locations = np.insert(customer_position, 0, depot_position, axis=0)
-
         demand = get_customer_demand(blueprint, customer_position, rng)
-        #demand = np.insert(demand, 0, 0, axis=0)
-
         if blueprint.grid_size == 1000:
             locations = original_locations / 1000
         elif blueprint.grid_size == 1000000:
@@ -104,8 +124,15 @@ def generate_Instance(blueprint, use_cost_memory, rng):
             locations = original_locations
         depot_indices = list(range(blueprint.n_depots))
 
-        mdvrp_instance = MDVRPInstance(depot_indices, locations, original_locations, demand, blueprint.capacity, use_cost_memory)
-        return mdvrp_instance
+        if blueprint.problem_type == 'mdvrp': 
+            mdvrp_instance = MDVRPInstance(depot_indices, locations, original_locations, demand, blueprint.capacity, use_cost_memory)
+            return mdvrp_instance
+        elif blueprint.problem_type == 'mdvrptw': 
+            #generate time windows
+            time_windows = get_customer_time_windows(blueprint, rng)
+            
+            mdvrptw_instance = MDVRPTWInstance(depot_indices, locations, original_locations, demand, time_windows, blueprint.capacity, use_cost_memory)
+            return mdvrptw_instance
 
 
 def get_depot_position(blueprint, rng):
@@ -157,12 +184,11 @@ def get_customer_position(blueprint, rng):
         customer_position_2 = rng.integers(0, 1001, (blueprint.nb_customers - len(customer_position), 2))
         return np.concatenate((customer_position, customer_position_2), axis=0)
 
-
 def get_customer_demand(blueprint, customer_position, rng):
     if blueprint.demand_type == 'inter':
-        if blueprint.n_depots == 1:
+        if blueprint.problem_type == 'vrp':
             return rng.integers(blueprint.demand_min, blueprint.demand_max + 1, size=blueprint.nb_customers)
-        elif blueprint.n_depots > 1:
+        else:
             demands = rng.integers(blueprint.demand_min, blueprint.demand_max + 1, size=blueprint.nb_customers + blueprint.n_depots)
             depot_indices = list(range(blueprint.n_depots))
             demands[depot_indices] = 0
@@ -194,6 +220,54 @@ def get_customer_demand(blueprint, customer_position, rng):
         return demands
     else:
         raise Exception("Unknown customer demand.")
+
+def get_customer_time_windows(blueprint, rng):
+    N = blueprint.nb_customers
+    tw_min = int(blueprint.tw_options['tw_min'])
+    tw_max = int(blueprint.tw_options['tw_max'])
+    avg_w = int(blueprint.tw_options['avg_window'])
+    horizon = tw_max - tw_min
+    assert horizon >= 2, "Time horizon too small"
+    avg_w = max(10, min(avg_w, horizon))
+
+    #spread centres uniformly in tw_min and tw_max and then apply jitter
+    base_centres = np.linspace(tw_min, tw_max, N)
+    jittered_sd = 0.10*horizon
+    centres = base_centres + rng.normal(0, jittered_sd, size=N)
+    centres = np.clip(centres, tw_min, tw_max)
+
+    #sample widths
+    sigma = max(1.0, 0.6*avg_w) #considered to be a wide scale 
+    widths = np.rint(rng.normal(loc=avg_w, scale=sigma, size=N)).astype(int)
+    widths = np.clip(widths, 10, horizon)
+    
+    time_windows = []
+    for c, w in zip(centres, widths):
+        w = max(1, w)
+        half = w//2
+
+        start = int(round(c)) - half
+
+        if start < tw_min:
+            start = tw_min
+        if start + w > tw_max:
+            start = tw_max - w
+        start = max(tw_min, min(start, tw_max -1 ))
+        end = start + w
+        end = min(end, tw_max)
+
+        if end <= start:
+            end = min(tw_max, start + 1)
+
+        time_windows.append([int(start), int(end)])
+        rng.shuffle(time_windows)
+
+    # depot time windows 
+    for _ in range(blueprint.n_depots):
+        time_windows.insert(0, [tw_min, tw_max])
+
+    return time_windows
+
 
 
 def read_instance(path, pkl_instance_idx=0):
