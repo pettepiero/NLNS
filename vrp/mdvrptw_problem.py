@@ -26,23 +26,38 @@ class MDVRPTWInstance():
         List of time windows (list of lists with two elements each)
     capacity: int
         Capacity of the vehicles
+    speed: float
+        Speed of vehicle (unit of distance/unit of time)
     solution: list
         List of tours
     solution_schedule: list
-        List of scheduled times for each tour
+        List of scheduled times for each tour in format [estimated arrival, estimated departure]
     nn_input_idx_to_tour: list
         List of network inputs (see description in __init__)
     open_nn_input_idx: list
         List of indices of inputs that have not been visited
     incomplete_tours: list
         List of incomplete tours of self.solution
-    costs_memory: np.ndarray
-        Float array containing travel times for each pair of nodes
+    distance_matrix: np.ndarray
+        Float array containing distances for each pair of nodes
     service_time: np.array
         Array of service times for each customer
+    tw_options: dict
+        Dict containing time window config options
     """
 
-    def __init__(self, depot_indices, locations, original_locations, demand, time_windows, capacity, service_time=5):
+    def __init__(
+            self, 
+            depot_indices, 
+            locations, 
+            original_locations, 
+            demand, 
+            time_windows, 
+            capacity, 
+            speed,
+            tw_options, 
+            service_time=5,
+            distance_matrix=None):
         self.nb_customers = len(locations)-len(depot_indices)
         assert self.nb_customers > 0, f"Error in nb_customers"
         self.depot_indices = depot_indices
@@ -56,6 +71,9 @@ class MDVRPTWInstance():
         self.demand = np.array(demand)  # demand for each customer (integer). Values are divided by capacity right before being
         # fed to the network
         self.capacity = capacity  # capacity of the vehicle
+        self.speed = speed
+        assert self.capacity > 1
+        assert self.speed > 0
 
         self.solution = None  # List of tours. Each tour is a list of location elements. Each location element is a
         # list with three values [i_l, d, i_n], with i_l being the index of the location,
@@ -67,15 +85,13 @@ class MDVRPTWInstance():
         # points to an input, this allows us to find out, which tour end that input corresponds to.
         self.open_nn_input_idx = None  # List of idx of those nn_inputs that have not been visited
         self.incomplete_tours = None  # List of incomplete tours of self.solution
-        self.costs_memory = np.full((self.nb_customers + self.n_depots, self.nb_customers + self.n_depots), np.nan, dtype="float")
-        self.fill_costs_memory(round=False)
+        if distance_matrix is not None:
+            self.distance_matrix = distance_matrix
+        else:
+            self.distance_matrix = np.full((self.nb_customers + self.n_depots, self.nb_customers + self.n_depots), np.nan, dtype="float")
+        self.fill_distance_matrix(round=False)
         self.service_time = np.full_like(self.demand, fill_value=service_time)
-    #def get_n_closest_locations_to(self, origin_location_id, mask, n):
-        #"""Return the idx of the n closest locations sorted by distance."""
-        #distances = np.array([np.inf] * len(mask))
-        #distances[mask] = ((self.locations[mask] * self.locations[origin_location_id]) ** 2).sum(1)
-        #order = np.argsort(distances)
-        #return order[:n]
+        self.tw_options = tw_options
 
     def get_n_closest_locations_to(self, origin_location_id, mask, n):
         """Return the idx of the n closest locations (Euclidean) sorted by distance."""
@@ -94,7 +110,6 @@ class MDVRPTWInstance():
         return idxs[nearest_masked_order]                 # original indices into self.locations
 
 
-
     def get_nearest_depot(self, loc):
         """ Return nearest depot to loc, based on Euclidian distance. """
         x,y = self.locations[loc]
@@ -108,25 +123,6 @@ class MDVRPTWInstance():
                 closest_depot = d
 
         return closest_depot 
-    
-    def urgency_score(self, start_idx, candidate, current_time, w=()):
-        cand_start, cand_end = self.time_windows[candidate] 
-        cand_demand = self.demand[candidate]
-        travel_time = self.costs_memory[start_idx, candidate]
-
-        cand_arrival = current_time + travel_time
-        start_of_service = max(cand_arrival, cand_start)
-
-        early_time = max(0, cand_start - cand_arrival) # if you arrive before start, you wait
-        late_time = max(0, start_of_service - cand_end) # if you arrive after end, you're late
-
-        departure_time = start_of_service + self.service_time[candidate]
-
-        #score = w[0]*travel_time + w[1]*late_time + w[2]*early_time + w[3]*cand_end
-        score = np.dot(w, [travel_time, late_time, early_time, cand_end])
-
-        return score, departure_time
-
 
     def get_n_most_urgent_custs_to(
         self,
@@ -169,7 +165,7 @@ class MDVRPTWInstance():
     
         tw     = self.time_windows[candidates]               
         s_time = self.service_time[candidates]                
-        tt     = self.costs_memory[start_idx, candidates]     
+        tt     = self.distance_matrix[start_idx, candidates]/self.speed 
     
         arrival       = current_time + tt
         start_service = np.maximum(arrival, tw[:, 0])
@@ -192,15 +188,14 @@ class MDVRPTWInstance():
         if not np.isfinite(scores).any():
             return (None, None, None, None)
     
-        # Top-n indices into candidates
         n = int(min(n, len(candidates)))
         top_idx = np.argpartition(scores, n - 1)[:n]
         top_idx = top_idx[np.argsort(scores[top_idx])]  
     
-        best_ids       = candidates[top_idx]
-        best_scores    = scores[top_idx]
-        best_starts    = start_service[top_idx]
-        best_departs   = depart[top_idx]
+        best_ids       = np.round(candidates[top_idx])
+        best_scores    = np.round(scores[top_idx])
+        best_starts    = np.round(start_service[top_idx])
+        best_departs   = np.round(depart[top_idx])
     
         return (best_ids, best_scores, best_starts, best_departs)
 
@@ -225,7 +220,7 @@ class MDVRPTWInstance():
         self.solution = []
         for input_idx, depot in enumerate(self.depot_indices):
             self.solution.append([[depot, 0, input_idx]]) # for depot only
-            self.solution_schedule.append([tw_min])
+            self.solution_schedule.append([[tw_min, tw_min]])
 
         # 2 do normal NLNS VRP greedy solution inside each cluster
         # use mask to only see some customers
@@ -237,34 +232,47 @@ class MDVRPTWInstance():
             mask[available_customers] = True
             cur_load = self.capacity
             self.solution.append([[depot, 0, input_idx]]) # to start route
-            self.solution_schedule.append([tw_min])
+            self.solution_schedule.append([[tw_min, tw_min]]) 
 
             best = None
             best_score = float('inf')
             route = []
+
             while mask.any() > 0:
-                most_urgent_cust_idx, _, _, most_urgent_cust_dep_time = self.get_n_most_urgent_custs_to(
+                current_time = self.solution_schedule[-1][-1][-1]
+                if current_time == tw_max: # last route was closed
+                    current_time = tw_min
+                most_urgent_cust_idx, _, most_urgent_cust_start_time, most_urgent_cust_dep_time = self.get_n_most_urgent_custs_to(
                         start_idx = self.solution[-1][-1][0],
                         candidates = np.asarray(available_customers, dtype=int),
-                        current_time = self.solution_schedule[-1][-1],
+                        current_time = current_time,
                         n=1)
-                    # if demand is valid then append to last modified route
-                if self.demand[most_urgent_cust_idx] <= cur_load:
+                    # if demand and time are valid then append to last modified route
+                cand_demand = self.demand[most_urgent_cust_idx]
+                time_to_depot = np.round(self.distance_matrix[most_urgent_cust_idx, depot]/self.speed).item()
+                if (cand_demand <= cur_load) and (most_urgent_cust_dep_time + time_to_depot <= tw_max):
                     mask[most_urgent_cust_idx] = False
                     available_customers.remove(most_urgent_cust_idx)
                     self.solution[-1].append([int(most_urgent_cust_idx.item()), int(self.demand[most_urgent_cust_idx].item()), None])
-                    self.solution_schedule[-1].append(most_urgent_cust_dep_time)
+                    new_schedule = [most_urgent_cust_start_time.item(), most_urgent_cust_dep_time.item()]
+                    self.solution_schedule[-1].append(new_schedule)
                     cur_load -= self.demand[most_urgent_cust_idx]
                 else: #otherwise start new route and close previous
-                    self.solution[-1].append([depot, 0, input_idx])
                     i = self.solution[-1][-1][0]
-                    self.solution_schedule[-1].append(self.costs_memory[i, depot])
+                    self.solution[-1].append([depot, 0, input_idx])
+                    time_to_depot = np.round(self.distance_matrix[i, depot]/self.speed).item()
+                    self.solution_schedule[-1].append([current_time + time_to_depot, tw_max])
                     self.solution.append([[depot, 0, input_idx]])
+                    self.solution_schedule.append([[tw_min, tw_min]])
                     cur_load = self.capacity
 
+            last_cust = self.solution[-1][-1][0]
+            time_to_depot = np.round(self.distance_matrix[last_cust, depot]/self.speed).item()
+            current_time = self.solution_schedule[-1][-1][-1]
             self.solution[-1].append([depot, 0, input_idx])
+            self.solution_schedule[-1].append([current_time + time_to_depot, tw_max])
 
-    def fill_costs_memory(self, round):
+    def fill_distance_matrix(self, round):
         side = self.n_depots+self.nb_customers
         cc = np.zeros(shape=(side, side))
         for i in range(side):
@@ -273,39 +281,65 @@ class MDVRPTWInstance():
                 + (self.original_locations[i, 1] - self.original_locations[j, 1]) ** 2)
         if round:
             cc = np.round(cc)
-        self.costs_memory = cc
+        self.distance_matrix = cc
+
+    def get_sum_early_late_mins(self, round):
+        """ Returns the sum of early minutes and the sum of late minutes of complete/incomplete solution """
 
 
     def get_costs_memory(self, round):
-        """Return the cost of the current complete solution. Uses a memory to improve performance."""
+        """ Return the cost of the current complete solution. Uses a memory to improve performance.
+            Cost is given by distance between nodes + late_coeff*(sum of late mins) + early_coeff*(sum early mins)"""
         c = 0
-        for t in self.solution:
-            #check that first position element of tour t starts at a depot
-            if t[0][0] not in self.depot_indices or t[-1][0] not in self.depot_indices:
+        a = self.tw_options['early_coeff']
+        b = self.tw_options['late_coeff']
+        #for t in self.solution:
+        for tour, schedule in zip(self.solution, self.solution_schedule):
+            #check that first position element of tour tour starts at a depot
+            if tour[0][0] not in self.depot_indices or tour[-1][0] not in self.depot_indices:
                 raise Exception("Incomplete solution.")
-            for i in range(0, len(t) - 1):
-                from_idx = t[i][0] 
-                to_idx = t[i + 1][0]
-                if np.isnan(self.costs_memory[from_idx, to_idx]):
+            for i in range(0, len(tour) - 1):
+                from_idx = tour[i][0] 
+                to_idx = tour[i + 1][0]
+                #distance part
+                if np.isnan(self.distance_matrix[from_idx, to_idx]):
                     cc = np.sqrt((self.original_locations[from_idx, 0] - self.original_locations[to_idx, 0]) ** 2
                                  + (self.original_locations[from_idx, 1] - self.original_locations[to_idx, 1]) ** 2)
                     if round:
                         cc = np.round(cc)
-                    self.costs_memory[from_idx, to_idx] = cc
+                    self.distance_matrix[from_idx, to_idx] = cc
                     c += cc
                 else:
-                    c += self.costs_memory[from_idx, to_idx]
+                    c += self.distance_matrix[from_idx, to_idx]
+                #schedule departure part
+                planned_arrival, planned_departure = schedule[i] 
+                delta_early = max(0, self.time_windows[to_idx, 0] - planned_arrival)
+                
+                delta_late = max(0, planned_departure - self.time_windows[to_idx, 1])
+                cc = a*delta_early + b*delta_late
+                if round:
+                    cc = np.round(cc)
+                c += cc 
         return c
 
     def get_costs(self, round):
         """Return the cost of the current complete solution."""
         c = 0
-        for t in self.solution:
+        for t, schedule in zip(self.solution, self.solution_schedule):
             if t[0][0] not in self.depot_indices or t[-1][0] not in self.depot_indices:
                 raise Exception("Incomplete solution.")
             for i in range(0, len(t) - 1):
-                cc = np.sqrt((self.original_locations[t[i][0], 0] - self.original_locations[t[i + 1][0], 0]) ** 2
-                             + (self.original_locations[t[i][0], 1] - self.original_locations[t[i + 1][0], 1]) ** 2)
+                from_idx = t[i][0] 
+                to_idx = t[i + 1][0]
+                cc = np.sqrt((self.original_locations[from_idx, 0] - self.original_locations[to_idx, 0]) ** 2
+                             + (self.original_locations[from_idx, 1] - self.original_locations[to_idx, 1]) ** 2)
+
+                #schedule departure part
+                planned_arrival, planned_departure = schedule[i] 
+                delta_early = max(0, self.time_windows[to_idx, 0] - planned_arrival)
+                
+                delta_late = max(0, planned_departure - self.time_windows[to_idx, 1])
+                cc += a*delta_early + b*delta_late
                 if round:
                     cc = np.round(cc)
                 c += cc
@@ -754,7 +788,7 @@ class MDVRPTWInstance():
                 demand              = self.demand,
                 capacity            = self.capacity)
         new_instance.solution = solution_copy
-        new_instance.costs_memory = self.costs_memory
+        new_instance.distance_matrix = self.distance_matrix
 
         if self.incomplete_tours is not None:
             new_instance.incomplete_tours = [ [x[:] for x in tour] for tour in self.incomplete_tours ]

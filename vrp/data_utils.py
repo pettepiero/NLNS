@@ -8,7 +8,7 @@ from tqdm import trange
 class InstanceBlueprint:
     """Describes the properties of a certain instance type (e.g. number of customers)."""
     def __init__(self, problem_type, nb_customers, depot_position, customer_position, nb_customer_cluster, demand_type, demand_min,
-                 demand_max, capacity, grid_size, n_depots=1, tw_options=None):
+                 demand_max, capacity, speed, grid_size, n_depots=1, tw_options=None):
         assert problem_type in ['vrp', 'mdvrp', 'mdvrptw'], f"Unknown problem type '{self.problem_type}'"
         self.problem_type = problem_type
         assert nb_customers > 0, "Not enough customers"
@@ -31,6 +31,9 @@ class InstanceBlueprint:
         self.demand_max = demand_max
         assert capacity > 0, f"Invalid capacity: {capacity} <= 0" 
         self.capacity = capacity
+        assert speed > 0
+        self.speed = speed
+        assert grid_size > 0
         self.grid_size = grid_size
         
         # time window specific info
@@ -40,8 +43,9 @@ class InstanceBlueprint:
             assert tw_options.__contains__('tw_min'), f"Invalid tw_options: doesn't contain 'tw_min' key"
             assert tw_options.__contains__('tw_max'), f"Invalid tw_options: doesn't contain 'tw_max' key"
             assert tw_options.__contains__('avg_window'), f"Invalid tw_options: doesn't contain 'avg_window' key"
-            #assert tw_options.__contains__('late_coeff'), f"Invalid tw_options: doesn't contain 'late_coeff' key"
-            #assert tw_options.__contains__('early_coeff'), f"Invalid tw_options: doesn't contain 'early_coeff' key"
+            assert tw_options.__contains__('min_window'), f"Invalid tw_options: doesn't contain 'min_window' key"
+            assert tw_options.__contains__('late_coeff'), f"Invalid tw_options: doesn't contain 'late_coeff' key"
+            assert tw_options.__contains__('early_coeff'), f"Invalid tw_options: doesn't contain 'early_coeff' key"
             self.tw_options = tw_options
 
 
@@ -113,7 +117,7 @@ def generate_Instance(blueprint, use_cost_memory, rng):
         for pos in customer_position:
             original_locations.append(pos)
 
-        original_locations = np.array(original_locations)
+        original_locations = np.asarray(original_locations)
         demand = get_customer_demand(blueprint, customer_position, rng)
         if blueprint.grid_size == 1000:
             locations = original_locations / 1000
@@ -131,7 +135,7 @@ def generate_Instance(blueprint, use_cost_memory, rng):
             #generate time windows
             time_windows = get_customer_time_windows(blueprint, rng)
             
-            mdvrptw_instance = MDVRPTWInstance(depot_indices, locations, original_locations, demand, time_windows, blueprint.capacity, use_cost_memory)
+            mdvrptw_instance = MDVRPTWInstance(depot_indices, locations, original_locations, demand, time_windows, blueprint.capacity, blueprint.speed, use_cost_memory)
             return mdvrptw_instance
 
 
@@ -226,9 +230,11 @@ def get_customer_time_windows(blueprint, rng):
     tw_min = int(blueprint.tw_options['tw_min'])
     tw_max = int(blueprint.tw_options['tw_max'])
     avg_w = int(blueprint.tw_options['avg_window'])
+    min_w = int(blueprint.tw_options['min_window'])
     horizon = tw_max - tw_min
     assert horizon >= 2, "Time horizon too small"
-    avg_w = max(10, min(avg_w, horizon))
+    min_w = max(1, min(min_w, horizon))
+    avg_w = max(min_w, min(avg_w, horizon))
 
     #spread centres uniformly in tw_min and tw_max and then apply jitter
     base_centres = np.linspace(tw_min, tw_max, N)
@@ -239,11 +245,17 @@ def get_customer_time_windows(blueprint, rng):
     #sample widths
     sigma = max(1.0, 0.6*avg_w) #considered to be a wide scale 
     widths = np.rint(rng.normal(loc=avg_w, scale=sigma, size=N)).astype(int)
-    widths = np.clip(widths, 10, horizon)
+    widths = np.clip(widths, min_w, horizon)
     
+
+    #max distance in map
+    max_dist = np.sqrt(blueprint.grid_size**2 + blueprint.grid_size**2)/blueprint.speed
+    latest_possible_end = int(np.floor(tw_max - max_dist)) #the latest feasible end time you allow for customer time windows, so vehicles can still get back to a depot in time.
+    latest_possible_end = max(tw_min + min_w, latest_possible_end) 
+
     time_windows = []
     for c, w in zip(centres, widths):
-        w = max(1, w)
+        w = max(min_w, w)
         half = w//2
 
         start = int(round(c)) - half
@@ -252,13 +264,19 @@ def get_customer_time_windows(blueprint, rng):
             start = tw_min
         if start + w > tw_max:
             start = tw_max - w
-        start = max(tw_min, min(start, tw_max -1 ))
+        start = max(tw_min, min(start, tw_max -w))
         end = start + w
-        end = min(end, tw_max)
+        if end > latest_possible_end:
+            end = latest_possible_end
+            start = max(tw_min, end -w)
 
-        if end <= start:
-            end = min(tw_max, start + 1)
+        if end-start < min_w:
+            need = min_w - (end - start)
+            end = min(latest_possible_end, end+need)
 
+            if end - start < min_w:
+                start = max(tw_min, end - min_w)
+    
         time_windows.append([int(start), int(end)])
         rng.shuffle(time_windows)
 

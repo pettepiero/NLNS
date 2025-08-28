@@ -14,7 +14,7 @@ class LoadFromFile(argparse.Action):
 class InstanceBlueprint_test(unittest.TestCase):
 
     def setUp(self):
-        self.tw_options = {'tw_min': 0, 'tw_max': 1000, 'avg_window': 30}
+        self.tw_options = {'tw_min': 0, 'tw_max': 1000, 'avg_window': 30, 'min_window': 10, 'late_coeff': 10, 'early_coeff': 10}
         self.blueprint_config = {
                 'problem_type': 'mdvrptw',
                 'nb_customers': 20,
@@ -25,13 +25,14 @@ class InstanceBlueprint_test(unittest.TestCase):
                 'demand_min': 1,
                 'demand_max': 5,
                 'capacity': 50,
+                'speed': 10,
                 'grid_size': 1,
                 'n_depots': 3,
                 'tw_options': self.tw_options,
             }
         self.rng = np.random.default_rng(SEED)
 
-        with open("config_example.json", 'r') as f:
+        with open("test/config_example.json", 'r') as f:
             config = json.load(f)
         self.config = argparse.Namespace(**config)
         
@@ -49,24 +50,49 @@ class InstanceBlueprint_test(unittest.TestCase):
         self.assertEqual(b.demand_min, 1)
         self.assertEqual(b.demand_max, 5)
         self.assertEqual(b.capacity, 50)
+        self.assertEqual(b.speed, 10)
         self.assertEqual(b.grid_size, 1)
         self.assertEqual(b.n_depots, 3)
         self.assertEqual(b.tw_options, self.tw_options)
-
 
     def test_get_customer_time_windows(self):
         self.blueprint = InstanceBlueprint(**self.blueprint_config)
         time_windows = get_customer_time_windows(self.blueprint, self.rng)
         self.assertEqual(len(time_windows), self.blueprint.nb_customers + self.blueprint.n_depots) 
 
-
     def test_create_dataset_mdvrptw(self):
         dataset = create_dataset(size=self.config.batch_size, config=self.config, create_solution=False, use_cost_memory=True, seed=self.config.seed) 
 
         self.assertEqual(len(dataset), self.config.batch_size)
-        print(dataset[0].solution)
 
     def test_create_initial_solution(self):
-        dataset = create_dataset(size=self.config.batch_size, config=self.config, create_solution=True, use_cost_memory=True, seed=self.config.seed) 
-        for el in dataset[0].solution:
-            print(el)
+        self.blueprint = get_blueprint(self.config.instance_blueprint)
+        instance = generate_Instance(
+                blueprint=self.blueprint,
+                use_cost_memory=True,
+                rng=self.rng) 
+        instance.create_initial_solution(self.config, self.tw_options)
+
+        self.assertTrue(instance.solution is not None)
+        for i in range(instance.n_depots):
+            self.assertEqual(instance.solution[i][0][0], instance.depot_indices[i])
+            self.assertEqual(instance.solution[i][0][-1], instance.depot_indices[i])
+
+        self.assertEqual(len(instance.solution), len(instance.solution_schedule))
+
+        i = 0
+        for sol, sched in zip(instance.solution, instance.solution_schedule):
+            self.assertEqual(len(sol), len(sched))
+
+            for j in range(0, len(sol)-1):
+                start_idx = sol[j][0]
+                end_idx = sol[j+1][0]
+                
+                self.assertGreater(sched[j+1][0], sched[j][1])
+
+                schedule_time_diff = sched[j+1][0] - sched[j][1]
+                time_diff = np.round(instance.distance_matrix[start_idx, end_idx]/instance.speed)
+                time_diff_with_window = instance.time_windows[end_idx][0] - sched[j][1]
+                # either time diff or time diff + remaining time until start of window
+                self.assertTrue((schedule_time_diff == time_diff) or (schedule_time_diff == time_diff_with_window))
+            i += 1 
