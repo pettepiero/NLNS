@@ -72,7 +72,7 @@ class InstanceBlueprint_test(unittest.TestCase):
                 use_cost_memory=True,
                 rng=self.rng) 
         instance.create_initial_solution(self.config, self.tw_options)
-
+        
         self.assertTrue(instance.solution is not None)
         for i in range(instance.n_depots):
             self.assertEqual(instance.solution[i][0][0], instance.depot_indices[i])

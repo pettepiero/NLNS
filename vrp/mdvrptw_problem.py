@@ -200,7 +200,7 @@ class MDVRPTWInstance():
         return (best_ids, best_scores, best_starts, best_departs)
 
 
-    def create_initial_solution(self, config, tw_options):
+    def create_initial_solution(self, tw_options):
         """Create an initial solution for this instance using a greedy heuristic."""
         tw_min = tw_options['tw_min']
         tw_max = tw_options['tw_max']
@@ -283,10 +283,6 @@ class MDVRPTWInstance():
             cc = np.round(cc)
         self.distance_matrix = cc
 
-    def get_sum_early_late_mins(self, round):
-        """ Returns the sum of early minutes and the sum of late minutes of complete/incomplete solution """
-
-
     def get_costs_memory(self, round):
         """ Return the cost of the current complete solution. Uses a memory to improve performance.
             Cost is given by distance between nodes + late_coeff*(sum of late mins) + early_coeff*(sum early mins)"""
@@ -325,6 +321,8 @@ class MDVRPTWInstance():
     def get_costs(self, round):
         """Return the cost of the current complete solution."""
         c = 0
+        a = self.tw_options['early_coeff']
+        b = self.tw_options['late_coeff']
         for t, schedule in zip(self.solution, self.solution_schedule):
             if t[0][0] not in self.depot_indices or t[-1][0] not in self.depot_indices:
                 raise Exception("Incomplete solution.")
@@ -348,26 +346,42 @@ class MDVRPTWInstance():
     def get_costs_incomplete(self, round):
         """Return the cost of the current incomplete solution."""
         c = 0
-        for tour in self.solution:
+        a = self.tw_options['early_coeff']
+        b = self.tw_options['late_coeff']
+        for tour, schedule in zip(self.solution, self.solution_schedule):
             if len(tour) <= 1:
                 continue
             for i in range(0, len(tour) - 1):
-                cc = np.sqrt((self.original_locations[tour[i][0], 0] - self.original_locations[tour[i + 1][0], 0]) ** 2
-                             + (self.original_locations[tour[i][0], 1] - self.original_locations[
-                    tour[i + 1][0], 1]) ** 2)
+                from_idx = tour[i][0] 
+                to_idx = tour[i + 1][0]
+                cc = np.sqrt((self.original_locations[from_idx, 0] - self.original_locations[to_idx, 0]) ** 2
+                             + (self.original_locations[from_idx, 1] - self.original_locations[
+                    to_idx, 1]) ** 2)
+
+                #schedule departure part
+                planned_arrival, planned_departure = schedule[i] 
+                delta_early = max(0, self.time_windows[to_idx, 0] - planned_arrival)
+                
+                delta_late = max(0, planned_departure - self.time_windows[to_idx, 1])
+                cc = a*delta_early + b*delta_late
                 if round:
                     cc = np.round(cc)
                 c += cc
         return c
 
     def destroy(self, customers_to_remove_idx):
-        """Remove the customers with the given idx from their tours. This creates an incomplete solution."""
+        """
+        Remove the customers with the given idx from their tours. The schedule is accordingly split for
+        the segments. This creates an incomplete solution.
+        """
         self.incomplete_tours = []
+        self.incomplete_tours_schedules = []
         st = []  # solution tours
+        sc = []  # solution schedules
 
         removed_customer_idx = []
 
-        for tour in self.solution:
+        for tour, sched in zip(self.solution, self.solution_schedule):
             last_split_idx = 0
             for i in range(1, len(tour) - 1):
                 if tour[i][0] in customers_to_remove_idx:
@@ -379,8 +393,13 @@ class MDVRPTWInstance():
                         st.append(new_tour_pre)
                         self.incomplete_tours.append(new_tour_pre)
 
+                        new_sched_pre = sched[last_split_idx:i]
+                        sc.append(new_sched_pre)
+                        self.incomplete_tours_schedules.append(new_sched_pre)
+
                     # The second consisting of only the customer to be removed
                     customer_idx = tour[i][0]
+                    schedule = sched[i]
                     if customer_idx not in removed_customer_idx:  # make sure the customer has not already been
                         # extracted from a different tour
                         demand = int(self.demand[customer_idx])
@@ -388,6 +407,11 @@ class MDVRPTWInstance():
                         st.append(new_tour)
                         self.incomplete_tours.append(new_tour)
                         removed_customer_idx.append(customer_idx)
+                    
+                        new_sched = [schedule]
+                        sc.append(new_sched)
+                        self.incomplete_tours_schedules.append(new_sched)
+
                     last_split_idx = i + 1
 
             if last_split_idx > 0:
@@ -396,10 +420,16 @@ class MDVRPTWInstance():
                     new_tour_post = tour[last_split_idx:]
                     st.append(new_tour_post)
                     self.incomplete_tours.append(new_tour_post)
+
+                    new_sched_post = sched[last_split_idx:]
+                    sc.append(new_sched_post)
+                    self.incomplete_tours_schedules.append(new_sched_post)
             else:  # add unchanged tour
                 st.append(tour)
+                sc.append(sched)
 
         self.solution = st
+        self.solution_schedule = sc
 
     def destroy_random(self, p, rng):
         """Random destroy. Select customers that should be removed at random and remove them from tours."""
@@ -505,22 +535,27 @@ class MDVRPTWInstance():
 
     def get_network_input(self, input_size):
         """Generate the tensor representation of an incomplete solution (i.e, a representation of the repair problem).
-         The input size must be provided so that the representations of all inputs of the batch have the same size.
+         The input size must be provided so that the representations of all inputs of the batch have the same size. The input for MDRPTW problem is structured as follows:
 
         [:, 0] x-coordinates for all points
         [:, 1] y-coordinates for all points
         [:, 2] demand values for all points
         [:, 3] state values for all points
+        [:, 4] normalized start of time window for all points
+        [:, 5] normalized end of time window for all points
 
+        Returns:
+            static input [:, [0,1,4,5]]
+            dynamic input [:, [2,3]]
         """
-        nn_input = np.zeros((input_size, 4))
+
+        nn_input = np.zeros((input_size, 6))
         nn_input[:self.n_depots, :2] = self.locations[self.depot_indices]
         nn_input[:self.n_depots, 2] = -1 * self.capacity  # Depots demand
         nn_input[:self.n_depots, 3] = -1  # Depots state
+        nn_input[:self.n_depots, 4] = self.time_windows[:self.n_depots, 0]/self.tw_options['tw_max']
+        nn_input[:self.n_depots, 5] = self.time_windows[:self.n_depots, 1]/self.tw_options['tw_max']
 
-        #nn_input[0, :2] = self.locations[0]  # Depot location
-        #nn_input[0, 2] = -1 * self.capacity  # Depot demand
-        #nn_input[0, 3] = -1  # Depot state
         network_input_idx_to_tour = [None] * input_size
         for d in range(self.n_depots): 
             network_input_idx_to_tour[d] = [self.solution[d], 0] #IMPORTANT: first part of solution have to be depots!!
@@ -536,6 +571,8 @@ class MDVRPTWInstance():
                 nn_input[i, :2] = self.locations[tour[0][0]] #coordinates of customer
                 nn_input[i, 2] = tour[0][1] # demand of customer
                 nn_input[i, 3] = 1 #encoding of single customer route
+                nn_input[i, 4] = self.time_windows[i, 0]/self.tw_options['tw_max']
+                nn_input[i, 5] = self.time_windows[i, 1]/self.tw_options['tw_max']
                 tour[0][2] = i # save network input index information in incomplete_tours
                 network_input_idx_to_tour[i] = [tour, 0]
                 destroyed_location_idx.append(tour[0][0])
@@ -550,6 +587,10 @@ class MDVRPTWInstance():
                         nn_input[i, 3] = 3
                     else:
                         nn_input[i, 3] = 2
+
+                    nn_input[i, 4] = self.time_windows[i, 0]/self.tw_options['tw_max']
+                    nn_input[i, 5] = self.time_windows[i, 1]/self.tw_options['tw_max']
+
                     tour[0][2] = i # save network input index information in incomplete_tours
                     destroyed_location_idx.append(tour[0][0])
                     i += 1
@@ -563,24 +604,18 @@ class MDVRPTWInstance():
                         nn_input[i, 3] = 3
                     else:
                         nn_input[i, 3] = 2
+
+                    nn_input[i, 4] = self.time_windows[i, 0]/self.tw_options['tw_max']
+                    nn_input[i, 5] = self.time_windows[i, 1]/self.tw_options['tw_max']
+
                     destroyed_location_idx.append(tour[-1][0])
                     i += 1
 
-       # self.open_nn_input_idx = []
-       # for tour in incomplete_tours:
-       #     if len(tour)>1:
-       #        # if first end not depot
-       #         if tour[0][0] not in self.depot_indices:
-       #             self.open_nn_input_idx.append(tour[0][2])
-       #         if tour[-1][0] not in self.depot_indices:
-       #             self.open_nn_input_idx.append(tour[-1][2])
-       #     if len(tour) == 1:
-       #         if tour[0][0] not in self.depot_indices:
-       #             self.open_nn_input_idx.append(tour[0][2])
-
         self.open_nn_input_idx = list(range(self.n_depots, i))
         self.nn_input_idx_to_tour = network_input_idx_to_tour
-        return nn_input[:, :2], nn_input[:, 2:]
+        static_input = nn_input[:, [0,1,4,5]]
+        dynamic_input = nn_input[:, [2,3]]
+        return static_input, dynamic_input 
 
     def _get_network_input_update_for_tour(self, tour, new_demand):
         """Returns an nn_input update for the tour tour. The demand of the tour is updated to new_demand"""
@@ -775,20 +810,26 @@ class MDVRPTWInstance():
     def get_solution_copy(self):
         """ Returns a copy of self.solution"""
         solution_copy = []
-        for tour in self.solution:
-            solution_copy.append([x[:] for x in tour]) # Fastest way to make a deep copy
-        return solution_copy
+        solution_schedule_copy = []
+        for tour, schedule in zip(self.solution, self.solution_schedule):
+            solution_copy.append([x[:] for x in tour]) 
+            solution_schedule_copy.append([x[:] for x in schedule]) 
+        return solution_copy, solution_schedule_copy
 
     def __deepcopy__(self, memo):
-        solution_copy = self.get_solution_copy()
-        new_instance = MDVRPInstance(
+        new_instance = MDVRPTWInstance(
                 depot_indices       = self.depot_indices,
                 locations           = self.locations, 
                 original_locations  = self.original_locations,
                 demand              = self.demand,
-                capacity            = self.capacity)
-        new_instance.solution = solution_copy
-        new_instance.distance_matrix = self.distance_matrix
+                capacity            = self.capacity,
+                time_windows        = self.time_windows,
+                speed               = self.speed,
+                tw_options          = self.tw_options,
+                service_time        = self.service_time,
+                distance_matrix     = self.distance_matrix)
+
+        new_instance.solution, new_instance.solution_schedule = self.get_solution_copy()
 
         if self.incomplete_tours is not None:
             new_instance.incomplete_tours = [ [x[:] for x in tour] for tour in self.incomplete_tours ]

@@ -4,6 +4,7 @@ import torch
 import numpy as np
 from vrp import vrp_problem
 from vrp import mdvrp_problem
+from vrp import mdvrptw_problem
 import torch.nn.functional as F
 
 
@@ -32,6 +33,9 @@ def _actor_model_forward(actor, instances, static_input, dynamic_input, config, 
 
         if config.problem_type == 'mdvrp':
             mask = mdvrp_problem.get_mask(origin_idx, dynamic_input, instances, config, vehicle_capacity).to(config.device).to(config.device)
+        elif config.problem_type == 'mdvrptw':
+            raise NotImplementedError
+            mask = mdvrptw_problem.get_mask(origin_idx, dynamic_input, instances, config, vehicle_capacity).to(config.device).to(config.device)
         else:
             raise NotImplementedError
             mask = vrp_problem.get_mask(origin_idx, dynamic_input, instances, config, vehicle_capacity).to(config.device).float()

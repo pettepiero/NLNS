@@ -135,7 +135,15 @@ def generate_Instance(blueprint, use_cost_memory, rng):
             #generate time windows
             time_windows = get_customer_time_windows(blueprint, rng)
             
-            mdvrptw_instance = MDVRPTWInstance(depot_indices, locations, original_locations, demand, time_windows, blueprint.capacity, blueprint.speed, use_cost_memory)
+            mdvrptw_instance = MDVRPTWInstance(
+                    depot_indices       = depot_indices,
+                    locations           = locations, 
+                    original_locations  = original_locations,
+                    demand              = demand,
+                    time_windows        = time_windows,
+                    capacity            = blueprint.capacity,
+                    speed               = blueprint.speed, 
+                    tw_options          = blueprint.tw_options)
             return mdvrptw_instance
 
 
