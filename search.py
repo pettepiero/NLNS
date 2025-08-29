@@ -80,7 +80,7 @@ def evaluate_single_search(config, model_path, instance_path):
     instance_names, costs, durations = [], [], []
     logging.info("### Single instance search ###")
 
-    if instance_path.endswith(".vrp") or instance_path.endswith(".sd"):
+    if instance_path.endswith(".vrp") or instance_path.endswith(".sd") or instance_path.endswith(".mdvrp"):
         logging.info("Starting solving a single instance")
         instance_files_path = [instance_path]
     elif instance_path.endswith(".pkl"):
@@ -103,6 +103,7 @@ def evaluate_single_search(config, model_path, instance_path):
 
     output_path = os.path.join(config.output_path, "search", 'results.txt')
     results = np.array(list(zip(instance_names, costs, durations)))
+    print(f"DEBUG: results.shape: {results.shape}")
     np.savetxt(output_path, results, delimiter=',', fmt=['%s', '%s', '%s'], header="name, cost, runtime")
 
     logging.info(

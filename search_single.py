@@ -1,3 +1,4 @@
+import traceback
 from multiprocessing import Pool, Manager
 from vrp.data_utils import read_instance
 from copy import deepcopy
@@ -7,7 +8,7 @@ import repair
 import time
 import math
 import search
-
+import queue as pyqueue
 
 def lns_single_seach_job(args):
     try:
@@ -84,6 +85,7 @@ def lns_single_seach_job(args):
 
     except Exception as e:
         print("Exception in lns_single_search job: {0}".format(e))
+        traceback.print_exc()   
 
 
 def lns_single_search_mp(instance_path, timelimit, config, model_path, pkl_instance_id=None):
@@ -104,7 +106,12 @@ def lns_single_search_mp(instance_path, timelimit, config, model_path, pkl_insta
     for i in range(config.lns_nb_cpus):
         queue_jobs.put([instance.solution, incumbent_costs])
 
+    print(f"\tDEBUG: entering while loop:")
     while time.time() - start_time < timelimit:
+        try:
+            result = queue_results.get(timeout=0.2)
+        except pyqueue.Empty:
+            continue
         # Receive the incumbent solution from a finished search process (reheating iteration finished)
         result = queue_results.get()
         if result != 0:
@@ -115,6 +122,7 @@ def lns_single_search_mp(instance_path, timelimit, config, model_path, pkl_insta
         # Distribute incumbent solution to search processes
         queue_jobs.put([instance.solution, incumbent_costs])
 
+    print(f"\tDEBUG: exited while loop:")
     pool.terminate()
     duration = time.time() - start_time
     instance.verify_solution(config)

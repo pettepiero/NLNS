@@ -19,6 +19,7 @@ import numpy as np
 import datetime
 import os
 import sys
+import zipfile
 import config
 import train
 import search
@@ -43,6 +44,8 @@ if __name__ == '__main__':
     os.makedirs(os.path.join(config.output_path, "solutions"))
     os.makedirs(os.path.join(config.output_path, "models"))
     os.makedirs(os.path.join(config.output_path, "search"))
+    if config.video:
+        os.makedirs(os.path.join(config.output_path, "images"))
 
     # Create logger and log run parameters
     logging.basicConfig(
@@ -63,6 +66,20 @@ if __name__ == '__main__':
 
         model_path = train.train_nlns(actor, critic, run_id, config)
         search.evaluate_batch_search(config, model_path)
+
+        if config.video:
+            folder_path = os.path.join(config.output_path, "images") 
+            output_path = folder_path.rstrip(os.sep) + ".zip"
+            with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                with roots, dirs, files in os.walk(folder_path):
+                    for file in files:
+                        abs_path = os.path.join(root, file)
+                        rel_path = os.path.relpath(abs_path, folder_path)
+                        zipf.write(abs_path, rel_path)
+            print(f"\n****************************************************************")
+            print(f"Zipped images in {output_path}")
+            print(f"****************************************************************\n")
+
     elif config.mode == "eval_batch":
         if config.instance_path and not config.instance_path.endswith(".pkl"):
             raise Exception("Batch mode only supports .pkl instances files.")

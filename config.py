@@ -7,6 +7,7 @@ def get_config():
     parser.add_argument('--mode', default='train', type=str, choices=['train', 'eval_single', 'eval_batch', 'multi_depot'])
     parser.add_argument('--problem_type', type=str, default="vrp", choices=['vrp', 'mdvrp'])
     parser.add_argument('--output_path', type=str, default="")
+    parser.add_argument('--video', type=bool, default=False)
     parser.add_argument('--validation_seed', default=0, type=int)
     parser.add_argument('--device', default='cuda', type=str)
     parser.add_argument('--round_distances', default=False, action='store_true')

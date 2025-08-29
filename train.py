@@ -11,7 +11,7 @@ import repair
 import main
 from vrp.data_utils import create_dataset
 from search import LnsOperatorPair
-#from tqdm import trange
+from tqdm import trange
 
 def train_nlns(actor, critic, run_id, config):
     rng = np.random.default_rng(config.seed)
@@ -35,8 +35,8 @@ def train_nlns(actor, critic, run_id, config):
     start_time = datetime.datetime.now()
 
     logging.info("Starting training...")
-    #for batch_idx in trange(1, config.nb_train_batches + 1):
-    for batch_idx in range(1, config.nb_train_batches + 1):
+    for batch_idx in trange(1, config.nb_train_batches + 1):
+    #for batch_idx in range(1, config.nb_train_batches + 1):
         # Get a batch of training instances from the training set. Training instances are generated in advance, because
         # generating them is expensive.
         training_set_batch_idx = batch_idx % config.nb_batches_training_set
