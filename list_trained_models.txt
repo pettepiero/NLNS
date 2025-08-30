@@ -1,0 +1,2 @@
+/home/pettena/NLNS/runs/run_29.8.2025_87528
+/home/pettena/NLNS/runs/run_29.8.2025_90788
