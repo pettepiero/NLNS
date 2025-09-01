@@ -93,8 +93,8 @@ def evaluate_single_search(config, model_path, instance_path):
         raise Exception("Unknown instance file format.")
 
     for i, instance_path in enumerate(instance_files_path):
-        if instance_path.endswith(".pkl") or instance_path.endswith(".vrp") or instance_path.endswith(".sd"):
-            for _ in range(config.nb_runs):
+        if instance_path.endswith(".pkl") or instance_path.endswith(".vrp") or instance_path.endswith(".sd") or instance_path.endswith(".mdvrp"):
+            for jj in range(config.nb_runs):
                 cost, duration = search_single.lns_single_search_mp(instance_path, config.lns_timelimit, config,
                                                                     model_path, i)
                 instance_names.append(instance_path)
@@ -103,7 +103,7 @@ def evaluate_single_search(config, model_path, instance_path):
 
     output_path = os.path.join(config.output_path, "search", 'results.txt')
     results = np.array(list(zip(instance_names, costs, durations)))
-    print(f"DEBUG: results.shape: {results.shape}")
+
     np.savetxt(output_path, results, delimiter=',', fmt=['%s', '%s', '%s'], header="name, cost, runtime")
 
     logging.info(

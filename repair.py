@@ -7,7 +7,6 @@ from vrp import mdvrp_problem
 import torch.nn.functional as F
 
 
-#def _actor_model_forward(actor, instances, static_input, dynamic_input, config, vehicle_capacity, rng):
 def _actor_model_forward(actor, instances, static_input, dynamic_input, config, vehicle_capacity, rng):
     batch_size, n_points, _ = static_input.shape
 
@@ -27,15 +26,20 @@ def _actor_model_forward(actor, instances, static_input, dynamic_input, config, 
         # if origin_idx == 0 select the next tour end that serves as the origin at random
         for i, instance in enumerate(instances):
             if (origin_idx[i] == 0 or int(origin_idx[i]) in instance.depot_indices) and not instance_repaired[i]:
-                origin_idx[i] = np.random.choice(instance.open_nn_input_idx, 1).item()
-                #origin_idx[i] = rng.choice(instance.open_nn_input_idx, 1).item()
+                if rng is None:
+                    origin_idx[i] = np.random.choice(instance.open_nn_input_idx, 1).item()
+                else:
+                    origin_idx[i] = rng.choice(instance.open_nn_input_idx, 1).item()
 
         if config.problem_type == 'mdvrp':
             mask = mdvrp_problem.get_mask(origin_idx, dynamic_input, instances, config, vehicle_capacity).to(config.device).to(config.device)
-        else:
-            raise NotImplementedError
+        elif config.problem_type == 'vrp':
             mask = vrp_problem.get_mask(origin_idx, dynamic_input, instances, config, vehicle_capacity).to(config.device).float()
-
+        else:
+            raise ValueError(
+                f"Problem in config.problem_type: expected either 'mdvrp' or 'vrp', got {config.problem_type}."
+            ) 
+            
         # Rescale customer demand based on vehicle capacity
         dynamic_input_float = dynamic_input.float()
         dynamic_input_float[:, :, 0] = dynamic_input_float[:, :, 0] / float(vehicle_capacity)
@@ -123,6 +127,11 @@ def repair(instances, actor, config, critic=None, rng=None):
         static_nn_input, dynamic_nn_input = instance.get_network_input(nb_input_points)
         static_input[i] = static_nn_input
         dynamic_input[i] = dynamic_nn_input
+
+    #for el in instances:
+        #print(f"\t{el.open_nn_input_idx}")
+        #print(f"\t{el.incomplete_tours}")
+
     static_input = torch.from_numpy(static_input).to(config.device).float()
     dynamic_input = torch.from_numpy(dynamic_input).to(config.device).long()
     vehicle_capacity = instances[0].capacity # Assumes that the vehicle capcity is identical for all instances of the batch

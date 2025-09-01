@@ -358,7 +358,7 @@ class MDVRPInstance():
             network_input_idx_to_tour[d] = [self.solution[d], 0] #IMPORTANT: first part of solution have to be depots!!
         i = self.n_depots 
         destroyed_location_idx = []
-
+        
         if self.incomplete_tours is None:
             self.incomplete_tours = self._get_incomplete_tours()
         incomplete_tours = self.incomplete_tours

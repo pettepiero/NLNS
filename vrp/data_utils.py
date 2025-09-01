@@ -324,3 +324,69 @@ def read_instances_pkl(path, offset=0, num_samples=None):
         instances.append(instance)
 
     return instances
+
+def read_instances_pkl(path, offset=0, num_samples=None):
+    instances = []
+
+    with open(path, 'rb') as f:
+        data = pickle.load(f)
+
+    if num_samples is None:
+        num_samples = len(data)
+    
+    for idx, rec in enumerate(data[offset:offset + num_samples], start=offset):
+        if not (isinstance(rec, (list, tuple)) and len(rec) == 4):
+            raise ValueError(
+                f"Record #{idx}: expected 4-tuple (depots, loc, demand, capacity), got \
+                type/len={type(rec)}/{len(rec) if hasattr(rec, '__len__') else 'n/a'}"
+            )
+
+        depots_raw, loc, demand_raw, capacity = rec
+        
+        #normalize depots 
+        depots = np.asarray(depots_raw, dtype=float)
+        if depots.ndim == 1:
+            #single depot (2, ) -> (1,2)
+            if depots.shape[0] !=2:
+                raise ValueError(f"Record #{idx}: single depot must be shape (2,), got {depots.shape}.")
+            depots = depots[None, :]
+        elif depots.ndim == 2:
+            if depots.shape[1] != 2:
+                raise ValueError(f"Record #{idx}: depots must have shape (D,2), got {depots.shape}.")
+        else:
+            raise ValueError(f"Record #{idx}: depots must be (2,) or (D,2), got {depots.shape}.")
+
+        #normalize customers to (N,2)
+        cust_loc = np.asarray(loc, dtype=float)
+        if cust_loc.ndim != 2 or cust_loc.shape[1] != 2:
+            raise ValueError(f"Record #{idx}: customer locations must be (N,2), got {cust_loc.shape}.")
+        
+        #normalize demand to (N,) and validate length
+        demand = np.asarray(demand_raw, dtype=int).ravel()
+        N = cust_loc.shape[0]
+        if demand.shape[0] != N:
+            raise ValueError(
+               f"Record #{idx}: demand length {demand.shape[0]} != number of customers {N}."
+            )
+        
+
+        D = depots.shape[0]
+        locations = np.vstack([depots, cust_loc])
+        demand_full = np.concatenate([np.zeros(D, dtype=int), demand])
+        depot_indices = list(range(D))
+    
+        if len(demand_full) != D+N:
+            raise ValueError(
+                f"Problem in shape of demand_full: Expected {D+N} but got {len(demand_full)}"
+            )
+
+        instance = MDVRPInstance(
+            depot_indices = depot_indices,
+            locations = locations,
+            original_locations = locations,
+            demand=demand_full,
+            capacity=int(capacity),
+        )
+        instances.append(instance)
+
+    return instances

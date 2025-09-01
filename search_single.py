@@ -13,7 +13,7 @@ import queue as pyqueue
 def lns_single_seach_job(args):
     try:
         id, config, instance_path, model_path, queue_jobs, queue_results, pkl_instance_id = args
-
+        rng = np.random.default_rng(id)
         operator_pairs = search.load_operator_pairs(model_path, config)
         instance = read_instance(instance_path, pkl_instance_id)
 
@@ -48,22 +48,29 @@ def lns_single_seach_job(args):
                 p_destruction = operator_pairs[selected_operator_pair_id].p_destruction
 
                 # Destroy instances
-                search.destroy_instances(instance_copies, destroy_procedure, p_destruction)
+                search.destroy_instances(
+                    rng                 = rng,
+                    instances           = instance_copies, 
+                    destroy_procedure   = destroy_procedure,
+                    destruction_p       = p_destruction
+                    )
 
                 # Repair instances
                 for i in range(int(len(instance_copies) / config.lns_batch_size)):
                     with torch.no_grad():
                         repair.repair(
-                            instance_copies[i * config.lns_batch_size: (i + 1) * config.lns_batch_size], actor, config)
+                            instances   = instance_copies[i * config.lns_batch_size: (i + 1) * config.lns_batch_size],
+                            actor       = actor, 
+                            config      = config,
+                            )
 
-                costs = [instance.get_costs_memory(config.round_distances) for instance in instance_copies]
+                costs = [inst.get_costs_memory(config.round_distances) for inst in instance_copies]
 
                 # Calculate the T_max and T_factor values for simulated annealing in the first iteration
                 if iter == 0:
                     q75, q25 = np.percentile(costs, [75, 25])
                     T_max = q75 - q25
                     T_factor = -math.log(T_max / T_min)
-                    #print("tmax", T_max)
 
                 min_costs = min(costs)
 
@@ -105,8 +112,7 @@ def lns_single_search_mp(instance_path, timelimit, config, model_path, pkl_insta
     # Distribute starting solution to search processes
     for i in range(config.lns_nb_cpus):
         queue_jobs.put([instance.solution, incumbent_costs])
-
-    print(f"\tDEBUG: entering while loop:")
+    
     while time.time() - start_time < timelimit:
         try:
             result = queue_results.get(timeout=0.2)
@@ -122,7 +128,6 @@ def lns_single_search_mp(instance_path, timelimit, config, model_path, pkl_insta
         # Distribute incumbent solution to search processes
         queue_jobs.put([instance.solution, incumbent_costs])
 
-    print(f"\tDEBUG: exited while loop:")
     pool.terminate()
     duration = time.time() - start_time
     instance.verify_solution(config)
