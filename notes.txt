@@ -3,3 +3,10 @@ python3 main.py --mode eval_batch --model_path /home/pettena/NLNS/runs/run_29.8.
 
 single instance search
 python3 main.py --mode eval_single --model_path /home/pettena/NLNS/runs/run_29.8.2025_87528/models/model_incumbent_C_MD_1_P_0.1_87528.pt --instance_path data/mdvrp_seed_0_id_0.mdvrp --lns_nb_cpus 10 --round_distances --device cpu --problem mdvrp --lns_timelimit 30
+
+train
+python3 main.py --mode train --problem_type mdvrp --instance_blueprint MD_1 --lns_destruction P --lns_destruction_p 0.1 --nb_batches_training_set 500 --lns_timelimit 300 --lns_batch_size 50 --device cpu --nb_train_batches 2500 --lns_nb_cpus 10
+
+generate_data
+python altr_generate_data.py --problem mdvrp --name validation_prova --dataset_size 1000 --depot_size 3
+

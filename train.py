@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import torch.optim as optim
+import csv
 import os
 from search import destroy_instances
 from copy import deepcopy
@@ -12,6 +13,14 @@ import main
 from vrp.data_utils import create_dataset
 from search import LnsOperatorPair
 from tqdm import trange
+
+def _append_csv_row(path: Path, row):
+    new_file = not path.exists()
+    with path.open("a", newline="") as f:
+        w = csv.writer(f)
+           if new_file:
+   
+
 
 def train_nlns(actor, critic, run_id, config):
     rng = np.random.default_rng(config.seed)
@@ -31,6 +40,17 @@ def train_nlns(actor, critic, run_id, config):
     critic.train()
 
     losses_actor, rewards, diversity_values, losses_critic = [], [], [], []
+    # save csv files with losses and rewards
+
+    metrics_dir = Path(getattr(config, "metrics_dir", Path(config.output_path) / "metrics"))
+    metrics_dir.mkdir(parents=True, exist_ok=True)  
+
+    # Allow user-defined file paths on config; otherwise default names under metrics_dir
+    actor_loss_path = Path(getattr(config, "actor_loss_path", metrics_dir / f"actor_loss_{run_id}.csv"))
+    critic_loss_path = Path(getattr(config, "critic_loss_path", metrics_dir / f"critic_loss_{run_id}.csv"))
+    reward_path = Path(getattr(config, "reward_path", metrics_dir / f"reward_{run_id}.csv"))
+    summary_path = Path(getattr(config, "summary_path", metrics_dir / f"summary_every_250_{run_id}.csv"))
+
     incumbent_costs = np.inf
     start_time = datetime.datetime.now()
 

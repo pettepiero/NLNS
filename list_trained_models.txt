@@ -1,2 +1,4 @@
 /home/pettena/NLNS/runs/run_29.8.2025_87528
 /home/pettena/NLNS/runs/run_29.8.2025_90788
+/home/pettena/NLNS/runs/run_1.9.2025_64323 #good
+/home/pettena/NLNS/runs/run_1.9.2025_82542 #bad
