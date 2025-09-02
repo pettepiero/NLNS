@@ -9,6 +9,8 @@ import time
 import math
 import search
 import queue as pyqueue
+from plot.plot import plot_instance
+import os
 
 def lns_single_seach_job(args):
     try:
@@ -99,6 +101,9 @@ def lns_single_search_mp(instance_path, timelimit, config, model_path, pkl_insta
     instance = read_instance(instance_path, pkl_instance_id)
     start_time = time.time()
     instance.create_initial_solution()
+    # plot initial instance 
+    dir_path = os.path.dirname(model_path)
+    plot_instance(instance, f"{dir_path}/initial_snapshot.png")
     incumbent_costs = instance.get_costs(config.round_distances)
     instance.verify_solution(config)
 
@@ -131,6 +136,8 @@ def lns_single_search_mp(instance_path, timelimit, config, model_path, pkl_insta
     pool.terminate()
     duration = time.time() - start_time
     instance.verify_solution(config)
+    # plot final instance 
+    plot_instance(instance, f"{dir_path}/final_snapshot.png")
     return instance.get_costs(config.round_distances), duration
 
 

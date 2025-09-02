@@ -7,23 +7,24 @@ def write_mdvrplib(filename, config, name="problem"):
     """ Generates instances of mdvrp based on 'generate_data.py' of DeepMDV repo.
         Returns them in the same format as 'write_vrplib' below """
 
+    blueprint = get_blueprint(config['instance_blueprint'])
     assert config['grid_size'] == 1000 or config['grid_size'] == 1000000
 
     MIN_LAT = 0
-    MAX_LAT = config['grid_size']
+    MAX_LAT = blueprint.grid_size
     MIN_LON = 0
-    MAX_LON = config['grid_size']
+    MAX_LON = blueprint.grid_size
 
-    #depot_latitudes = np.random.randint(low=MIN_LAT, high=MAX_LAT, size=config['depot_size']).tolist()
-    #depot_longitudes = np.random.randint(low=MIN_LON, high=MAX_LON, size=config['depot_size']).tolist()
+    #depot_latitudes = np.random.randint(low=MIN_LAT, high=MAX_LAT, size=blueprint.n_depots).tolist()
+    #depot_longitudes = np.random.randint(low=MIN_LON, high=MAX_LON, size=blueprint.n_depots).tolist()
     #depots_coordinates = list(zip(depot_latitudes, depot_longitudes))
-    depot_indices = list(range(config['depot_size']))
+    depot_indices = list(range(blueprint.n_depots))
 
-    node_latitudes = np.random.randint(low=MIN_LAT, high=MAX_LAT, size=config['vrp_size']).tolist()
-    node_longitudes = np.random.randint(low=MIN_LON, high=MAX_LON, size=config['vrp_size']).tolist()
+    node_latitudes = np.random.randint(low=MIN_LAT, high=MAX_LAT, size=blueprint.nb_customers).tolist()
+    node_longitudes = np.random.randint(low=MIN_LON, high=MAX_LON, size=blueprint.nb_customers).tolist()
     nodes_coordinates = list(zip(node_latitudes, node_longitudes))
 
-    demands = np.random.poisson(lam=1.0, size=config['vrp_size'])
+    demands = np.random.poisson(lam=1.0, size=blueprint.nb_customers)
     # Replace any zeros with 1 (to avoid zero demand)
     demands = np.where(demands == 0, 1, demands)
     demands[depot_indices] = 0
@@ -35,10 +36,10 @@ def write_mdvrplib(filename, config, name="problem"):
             for k, v in (
                 ("NAME", name),
                 ("TYPE", "MDVRP"),
-                ("DIMENSION", config['vrp_size']),
-                ("NUM_DEPOTS", config['depot_size']),
+                ("DIMENSION", blueprint.nb_customers),
+                ("NUM_DEPOTS", blueprint.n_depots),
                 ("EDGE_WEIGHT_TYPE", config['dist_type']),
-                ("CAPACITY", config['capacity'])
+                ("CAPACITY", blueprint.capacity)
             )
         ]))
         f.write("\n")
@@ -125,12 +126,6 @@ if __name__ == "__main__":
         os.makedirs(config.data_dir)
 
     if config.problem == "mdvrp":
-        assert config.vrp_size, "VRP size needed in mdvrp"
-        assert config.depot_size, "Depot size needed in mdvrp"
-        assert config.depot_size >1, "Depot size <=1 is not mdvrp"
-        assert config.depot_size < config.vrp_size, "Depot size < #customers"
-        assert config.capacity, "Capacity needed in mdvrp"
-        
         for i in range(config.dataset_size):
             name = "mdvrp_seed_{}_id_{}".format(config.seed, i)
             filename = os.path.join(config.data_dir, name + ".mdvrp")

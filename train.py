@@ -13,14 +13,8 @@ import main
 from vrp.data_utils import create_dataset
 from search import LnsOperatorPair
 from tqdm import trange
-
-def _append_csv_row(path: Path, row):
-    new_file = not path.exists()
-    with path.open("a", newline="") as f:
-        w = csv.writer(f)
-           if new_file:
-   
-
+from pathlib import Path
+from plot.plot import plot_instance
 
 def train_nlns(actor, critic, run_id, config):
     rng = np.random.default_rng(config.seed)
@@ -41,15 +35,16 @@ def train_nlns(actor, critic, run_id, config):
 
     losses_actor, rewards, diversity_values, losses_critic = [], [], [], []
     # save csv files with losses and rewards
-
     metrics_dir = Path(getattr(config, "metrics_dir", Path(config.output_path) / "metrics"))
     metrics_dir.mkdir(parents=True, exist_ok=True)  
 
     # Allow user-defined file paths on config; otherwise default names under metrics_dir
-    actor_loss_path = Path(getattr(config, "actor_loss_path", metrics_dir / f"actor_loss_{run_id}.csv"))
-    critic_loss_path = Path(getattr(config, "critic_loss_path", metrics_dir / f"critic_loss_{run_id}.csv"))
-    reward_path = Path(getattr(config, "reward_path", metrics_dir / f"reward_{run_id}.csv"))
     summary_path = Path(getattr(config, "summary_path", metrics_dir / f"summary_every_250_{run_id}.csv"))
+
+    if not summary_path.exists():
+        with summary_path.open("w", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(["timestamp", "batch_idx", "mean_reward_250", "mean_actor_loss_250", "mean_critic_loss_250"])
 
     incumbent_costs = np.inf
     start_time = datetime.datetime.now()
@@ -99,9 +94,14 @@ def train_nlns(actor, critic, run_id, config):
             mean_loss = np.mean(losses_actor[-250:])
             mean_critic_loss = np.mean(losses_critic[-250:])
             mean_reward = np.mean(rewards[-250:])
+
             logging.info(
-                f'Batch {batch_idx}/{config.nb_train_batches}, repair costs (reward): {mean_reward:2.3f}, loss: {mean_loss:2.6f}'
-                f', critic_loss: {mean_critic_loss:2.6f}')
+                f'Batch {batch_idx}/{config.nb_train_batches}, repair costs (reward): {mean_reward:2.3f}, loss: {mean_loss:2.6f} , critic_loss: {mean_critic_loss:2.6f}')
+            
+            now = datetime.datetime.now().isoformat()
+            with summary_path.open("a", newline="") as f:
+                w = csv.writer(f)
+                w.writerow([now, batch_idx, mean_reward, mean_loss, mean_critic_loss])
 
         # Evaluate and save model every 5000 batches
         if batch_idx % 5000 == 0 or batch_idx == config.nb_train_batches:

@@ -10,7 +10,6 @@ def plot_instance(vrp, filename):
     - Customers as circles
     - Routes as lines
     """
-    os.makedirs('./plots', exist_ok=True)
     sol = vrp.solution
 
     fig, ax = plt.subplots(figsize=(12, 10))
@@ -65,6 +64,6 @@ def plot_instance(vrp, filename):
     ax.set_ylim(0, 1)
     ax.set_title("MDVRP Solution")
     ax.legend()
-    plt.savefig(f'./plots/{filename}')
+    plt.savefig(f'{filename}')
     plt.close()
 
