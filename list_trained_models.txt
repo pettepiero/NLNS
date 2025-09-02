@@ -3,3 +3,4 @@
 /home/pettena/NLNS/runs/run_1.9.2025_64323 #good
 /home/pettena/NLNS/runs/run_1.9.2025_82542 #bad
 /home/pettena/NLNS/runs/run_1.9.2025_64356 #medium
+/home/pettena/NLNS/runs/run_2.9.2025_60171 #good

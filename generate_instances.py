@@ -5,7 +5,7 @@ from vrp.data_utils import generate_Instance, get_blueprint
 
 def write_mdvrplib(filename, config, name="problem"):
     """ Generates instances of mdvrp based on 'generate_data.py' of DeepMDV repo.
-        Returns them in the same format as 'write_vrplib' below """
+        Returns them in the VRPLIB format as 'write_vrplib' below """
 
     blueprint = get_blueprint(config['instance_blueprint'])
     assert config['grid_size'] == 1000 or config['grid_size'] == 1000000
@@ -19,7 +19,7 @@ def write_mdvrplib(filename, config, name="problem"):
     #depot_longitudes = np.random.randint(low=MIN_LON, high=MAX_LON, size=blueprint.n_depots).tolist()
     #depots_coordinates = list(zip(depot_latitudes, depot_longitudes))
     depot_indices = list(range(blueprint.n_depots))
-
+  
     node_latitudes = np.random.randint(low=MIN_LAT, high=MAX_LAT, size=blueprint.nb_customers).tolist()
     node_longitudes = np.random.randint(low=MIN_LON, high=MAX_LON, size=blueprint.nb_customers).tolist()
     nodes_coordinates = list(zip(node_latitudes, node_longitudes))
@@ -40,6 +40,7 @@ def write_mdvrplib(filename, config, name="problem"):
                 ("NUM_DEPOTS", blueprint.n_depots),
                 ("EDGE_WEIGHT_TYPE", config['dist_type']),
                 ("CAPACITY", blueprint.capacity)
+                ("SERVICE_TIME", blueprint.service_time)
             )
         ]))
         f.write("\n")

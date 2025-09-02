@@ -7,8 +7,7 @@ from tqdm import trange
 class InstanceBlueprint:
     """Describes the properties of a certain instance type (e.g. number of customers)."""
 
-    def __init__(self, nb_customers, depot_position, customer_position, nb_customer_cluster, demand_type, demand_min,
-                 demand_max, capacity, grid_size, n_depots=1):
+    def __init__(self, nb_customers, depot_position, customer_position, nb_customer_cluster, demand_type, demand_min, demand_max, capacity, grid_size, service_time, n_depots=1):
         self.nb_customers = nb_customers
         self.n_depots = n_depots 
         self.depot_position = depot_position
@@ -19,6 +18,7 @@ class InstanceBlueprint:
         self.demand_max = demand_max
         self.capacity = capacity
         self.grid_size = grid_size
+        self.service_time = service_time
 
 
 def get_blueprint(blueprint_name):
@@ -104,7 +104,15 @@ def generate_Instance(blueprint, use_cost_memory, rng):
             locations = original_locations
         depot_indices = list(range(blueprint.n_depots))
 
-        mdvrp_instance = MDVRPInstance(depot_indices, locations, original_locations, demand, blueprint.capacity, use_cost_memory)
+        mdvrp_instance = MDVRPInstance(
+                depot_indices       = depot_indices,
+                locations           = locations, 
+                original_locations  = original_locations,
+                demand              = demand, 
+                blueprint.capacity  = blueprint.capacity, 
+                use_cost_memory     = use_cost_memory,
+                service_time        = blueprint.service_time)
+
         return mdvrp_instance
 
 
@@ -218,6 +226,8 @@ def read_instance_mdvrp(path):
             dimension = int(line.split(':')[1])
         elif line.startswith("CAPACITY"):
             capacity = int(line.split(':')[1])
+        elif line.startswith("SERVICE_TIME"):
+            service_time = int(line.split(':')[1])
         elif line.startswith("NUM_DEPOTS"):
             num_depots = int(line.split(':')[1])
         elif line.startswith('NODE_COORD_SECTION'):
@@ -234,9 +244,21 @@ def read_instance_mdvrp(path):
             depot_indices = np.loadtxt(lines[i + 1:i + 1 + num_depots], dtype=int)
             i = i + num_depots 
         i += 1
+    
+    if ((locations > 0) & (locations < 1)).all():
+        #then grid size is 0, 1
+        grid_size = 1
+    elif ((locations > 0) & (locations < 1000)).all():
+        #then grid size is likely 1000
+        grid_size = 1000
+    elif ((locations > 0) & (locations < 1000000)).all():
+        #then grid size is likely 1000000
+        grid_size = 1000000
+    else:
+        raise ValueError(f"Error in estimating grid size")
 
     original_locations = locations[:, 1:]
-    locations = original_locations / 1000
+    locations = original_locations / grid_size 
     demand = demand[:, 1:].squeeze()
     depot_indices = depot_indices[:, 1:].squeeze()
     depot_indices = depot_indices.tolist()
@@ -246,7 +268,8 @@ def read_instance_mdvrp(path):
             locations = locations,
             original_locations = original_locations,
             demand = demand, 
-            capacity = capacity)
+            capacity = capacity,
+            service_time = service_time)
     return instance
 
 def read_instance_vrp(path):
@@ -335,13 +358,13 @@ def read_instances_pkl(path, offset=0, num_samples=None):
         num_samples = len(data)
     
     for idx, rec in enumerate(data[offset:offset + num_samples], start=offset):
-        if not (isinstance(rec, (list, tuple)) and len(rec) == 4):
+        if not (isinstance(rec, (list, tuple)) and len(rec) == 5):
             raise ValueError(
-                f"Record #{idx}: expected 4-tuple (depots, loc, demand, capacity), got \
+                f"Record #{idx}: expected 4-tuple (depots, loc, demand, capacity, service_time), got \
                 type/len={type(rec)}/{len(rec) if hasattr(rec, '__len__') else 'n/a'}"
             )
 
-        depots_raw, loc, demand_raw, capacity = rec
+        depots_raw, loc, demand_raw, capacity, service_time = rec
         
         #normalize depots 
         depots = np.asarray(depots_raw, dtype=float)
@@ -381,11 +404,12 @@ def read_instances_pkl(path, offset=0, num_samples=None):
             )
 
         instance = MDVRPInstance(
-            depot_indices = depot_indices,
-            locations = locations,
-            original_locations = locations,
-            demand=demand_full,
-            capacity=int(capacity),
+            depot_indices       = depot_indices,
+            locations           = locations,
+            original_locations  = locations,
+            demand              = demand_full,
+            capacity            = int(capacity),
+            service_time        = service_time,
         )
         instances.append(instance)
 
