@@ -262,8 +262,7 @@ def read_instance_mdvrp(path):
     original_locations = locations
     locations = original_locations / grid_size 
     demand = demand[:, 1:].squeeze()
-    depot_indices = depot_indices[:, 1:].squeeze()
-    depot_indices = depot_indices.tolist()
+    depot_indices = depot_indices.squeeze().tolist()
 
     instance = MDVRPInstance(
             depot_indices = depot_indices,
