@@ -66,7 +66,8 @@ def lns_single_seach_job(args):
                             config      = config,
                             )
 
-                costs = [inst.get_costs_memory(config.round_distances) for inst in instance_copies]
+                costs = [inst.get_costs_memory() for inst in instance_copies]
+                costs = np.asarray(costs, dtype=float)
 
                 # Calculate the T_max and T_factor values for simulated annealing in the first iteration
                 if iter == 0:
@@ -91,6 +92,7 @@ def lns_single_seach_job(args):
                     cur_cost = min_costs
 
             queue_results.put([incumbent_solution, incumbent_cost])
+            print(f"Finished search")
 
     except Exception as e:
         print("Exception in lns_single_search job: {0}".format(e))
@@ -104,7 +106,7 @@ def lns_single_search_mp(instance_path, timelimit, config, model_path, pkl_insta
     # plot initial instance 
     dir_path = os.path.dirname(model_path)
     plot_instance(instance, f"{dir_path}/initial_snapshot.png")
-    incumbent_costs = instance.get_costs(config.round_distances)
+    incumbent_costs = instance.get_costs()
     instance.verify_solution(config)
 
     m = Manager()
@@ -118,6 +120,7 @@ def lns_single_search_mp(instance_path, timelimit, config, model_path, pkl_insta
     for i in range(config.lns_nb_cpus):
         queue_jobs.put([instance.solution, incumbent_costs])
     
+    print(f"starting while time.time()...") 
     while time.time() - start_time < timelimit:
         try:
             result = queue_results.get(timeout=0.2)
@@ -132,12 +135,12 @@ def lns_single_search_mp(instance_path, timelimit, config, model_path, pkl_insta
                 print('incumbent_costs', incumbent_costs)
         # Distribute incumbent solution to search processes
         queue_jobs.put([instance.solution, incumbent_costs])
-
+    print(f"Finished while time.time()")
     pool.terminate()
     duration = time.time() - start_time
     instance.verify_solution(config)
     # plot final instance 
     plot_instance(instance, f"{dir_path}/final_snapshot.png")
-    return instance.get_costs(config.round_distances), duration
+    return instance.get_costs(), duration
 
 

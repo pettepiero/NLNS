@@ -10,7 +10,6 @@ def get_config():
     parser.add_argument('--video', type=bool, default=False)
     parser.add_argument('--validation_seed', default=0, type=int)
     parser.add_argument('--device', default='cuda', type=str)
-    parser.add_argument('--round_distances', default=False, action='store_true')
     parser.add_argument('--allow_split_delivery', dest='split_delivery', default=False, action='store_true')
     parser.add_argument('--seed', default=None, type=int)
 

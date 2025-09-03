@@ -3,28 +3,28 @@ import os
 import numpy as np
 from vrp.data_utils import generate_Instance, get_blueprint
 
-def write_mdvrplib(filename, config, name="problem"):
+def write_mdvrplib(filename, config, rng, name="problem"):
     """ Generates instances of mdvrp based on 'generate_data.py' of DeepMDV repo.
         Returns them in the VRPLIB format as 'write_vrplib' below """
 
     blueprint = get_blueprint(config['instance_blueprint'])
-    assert config['grid_size'] == 1000 or config['grid_size'] == 1000000
-
     MIN_LAT = 0
     MAX_LAT = blueprint.grid_size
     MIN_LON = 0
     MAX_LON = blueprint.grid_size
 
-    #depot_latitudes = np.random.randint(low=MIN_LAT, high=MAX_LAT, size=blueprint.n_depots).tolist()
-    #depot_longitudes = np.random.randint(low=MIN_LON, high=MAX_LON, size=blueprint.n_depots).tolist()
-    #depots_coordinates = list(zip(depot_latitudes, depot_longitudes))
-    depot_indices = list(range(blueprint.n_depots))
-  
-    node_latitudes = np.random.randint(low=MIN_LAT, high=MAX_LAT, size=blueprint.nb_customers).tolist()
-    node_longitudes = np.random.randint(low=MIN_LON, high=MAX_LON, size=blueprint.nb_customers).tolist()
+    depot_indices = list(range(1, blueprint.n_depots+1))
+    
+    if blueprint.grid_size == 1000 or blueprint.grid_size == 100000:
+        node_latitudes = rng.integers(low=MIN_LAT, high=MAX_LAT, size=blueprint.nb_customers + blueprint.n_depots).tolist()
+        node_longitudes = rng.integers(low=MIN_LON, high=MAX_LON, size=blueprint.nb_customers + blueprint.n_depots).tolist()
+    elif blueprint.grid_size == 1:
+        node_latitudes = np.round(rng.random(size=blueprint.nb_customers + blueprint.n_depots).tolist(), 3)
+        node_longitudes = np.round(rng.random(size=blueprint.nb_customers + blueprint.n_depots).tolist(), 3)
+    else:
+        raise ValueError("Error in grid size option")
     nodes_coordinates = list(zip(node_latitudes, node_longitudes))
-
-    demands = np.random.poisson(lam=1.0, size=blueprint.nb_customers)
+    demands = rng.poisson(lam=1.0, size=blueprint.nb_customers + blueprint.n_depots)
     # Replace any zeros with 1 (to avoid zero demand)
     demands = np.where(demands == 0, 1, demands)
     demands[depot_indices] = 0
@@ -36,36 +36,28 @@ def write_mdvrplib(filename, config, name="problem"):
             for k, v in (
                 ("NAME", name),
                 ("TYPE", "MDVRP"),
-                ("DIMENSION", blueprint.nb_customers),
+                ("DIMENSION", blueprint.nb_customers + blueprint.n_depots),
                 ("NUM_DEPOTS", blueprint.n_depots),
                 ("EDGE_WEIGHT_TYPE", config['dist_type']),
-                ("CAPACITY", blueprint.capacity)
-                ("SERVICE_TIME", blueprint.service_time)
+                ("CAPACITY", blueprint.capacity),
             )
         ]))
         f.write("\n")
         f.write("DEPOT_SECTION\n")
-        #f.write("\n".join([
-        #    "{}\t{}\t{}".format(i + 1, x, y)
-        #    for i, (x, y) in enumerate(depots_coordinates)
-        #]))
         f.write("\n".join([
-            #"{}\t{}".format(i + 1, d)
-            "{}\t{}".format(i, d)
+            "{}".format(d)
             for i, d in enumerate(depot_indices)
         ]))
         f.write("\n")
         f.write("NODE_COORD_SECTION\n")
         f.write("\n".join([
-            #"{}\t{}\t{}".format(i + 1, x, y)
-            "{}\t{}\t{}".format(i, x, y)
+            "{}\t{}\t{}".format(i + 1, x, y)
             for i, (x, y) in enumerate(nodes_coordinates)
         ]))
         f.write("\n")
         f.write("DEMAND_SECTION\n")
         f.write("\n".join([
-            #"{}\t{}".format(i + 1, d)
-            "{}\t{}".format(i, d)
+            "{}\t{}".format(i + 1, d)
             for i, d in enumerate(demands)
         ]))
         f.write("\n")
@@ -122,7 +114,7 @@ if __name__ == "__main__":
 
     config = parser.parse_args()
 
-    np.random.seed(config.seed)
+    rng = np.random.default_rng(config.seed)
     if not os.path.exists(config.data_dir):
         os.makedirs(config.data_dir)
 
@@ -130,14 +122,14 @@ if __name__ == "__main__":
         for i in range(config.dataset_size):
             name = "mdvrp_seed_{}_id_{}".format(config.seed, i)
             filename = os.path.join(config.data_dir, name + ".mdvrp")
-            write_mdvrplib(filename, vars(config), name)
+            write_mdvrplib(filename=filename, config=vars(config), rng=rng, name=name)
 
     elif config.problem == "vrp":
         assert config.instance_blueprint.startswith("XE_"), 'Only XE are supported'
         blueprint = get_blueprint(config.instance_blueprint)
 
         for i in range(config.dataset_size):
-            instance = generate_Instance(blueprint, False)
+            instance = generate_Instance(blueprint=blueprint, use_cost_memory=False, rng=rng)
 
             name = "{}_seed_{}_id_{}".format(config.instance_blueprint, config.seed, i)
             filename = os.path.join(config.data_dir, name + ".vrp")

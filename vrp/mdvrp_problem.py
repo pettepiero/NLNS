@@ -142,7 +142,7 @@ class MDVRPInstance():
                     cur_load = self.capacity
             self.solution[-1].append([depot, 0, input_idx])
 
-    def get_costs_memory(self, round):
+    def get_costs_memory(self):
         """Return the cost of the current complete solution. Uses a memory to improve performance."""
         c = 0
         for t in self.solution:
@@ -155,15 +155,13 @@ class MDVRPInstance():
                 if np.isnan(self.costs_memory[from_idx, to_idx]):
                     cc = np.sqrt((self.original_locations[from_idx, 0] - self.original_locations[to_idx, 0]) ** 2
                                  + (self.original_locations[from_idx, 1] - self.original_locations[to_idx, 1]) ** 2)
-                    if round:
-                        cc = np.round(cc)
-                    self.costs_memory[from_idx, to_idx] = cc
                     c += cc
+                    self.costs_memory[from_idx, to_idx] = cc
                 else:
                     c += self.costs_memory[from_idx, to_idx]
         return c
 
-    def get_costs(self, round):
+    def get_costs(self):
         """Return the cost of the current complete solution."""
         c = 0
         for t in self.solution:
@@ -172,12 +170,10 @@ class MDVRPInstance():
             for i in range(0, len(t) - 1):
                 cc = np.sqrt((self.original_locations[t[i][0], 0] - self.original_locations[t[i + 1][0], 0]) ** 2
                              + (self.original_locations[t[i][0], 1] - self.original_locations[t[i + 1][0], 1]) ** 2)
-                if round:
-                    cc = np.round(cc)
                 c += cc
         return c
 
-    def get_costs_incomplete(self, round):
+    def get_costs_incomplete(self):
         """Return the cost of the current incomplete solution."""
         c = 0
         for tour in self.solution:
@@ -187,8 +183,6 @@ class MDVRPInstance():
                 cc = np.sqrt((self.original_locations[tour[i][0], 0] - self.original_locations[tour[i + 1][0], 0]) ** 2
                              + (self.original_locations[tour[i][0], 1] - self.original_locations[
                     tour[i + 1][0], 1]) ** 2)
-                if round:
-                    cc = np.round(cc)
                 c += cc
         return c
 
