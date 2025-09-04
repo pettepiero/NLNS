@@ -40,7 +40,7 @@ class MDVRPInstance():
         self.depot_indices = depot_indices
         self.n_depots = len(self.depot_indices)
         assert len(self.depot_indices) > 0, f"Insufficient depots"
-        self.customer_indices = [i for i in range(self.nb_customers + self.n_depots) if i not in self.depot_indices]
+        self.customer_indices = [i for i in range(1, self.nb_customers + self.n_depots) if i not in self.depot_indices]
         self.locations = locations  # coordinates of all locations in the interval [0, 1]
         self.original_locations = original_locations  # original coordinates of locations (used to compute objective
         # value)
@@ -76,8 +76,10 @@ class MDVRPInstance():
         if idxs.size == 0:
             return np.array([], dtype=int)
     
-        origin = locs[origin_location_id]
-        diffs = locs[idxs] - origin
+        origin = np.asarray(locs[origin_location_id], dtype=float)
+        locs = np.asarray(locs[idxs], dtype=float)
+        #diffs = locs[idxs] - origin
+        diffs = locs - origin
         dists = np.linalg.norm(diffs, axis=1) 
     
         # Take the n smallest distances among the masked indices
@@ -108,9 +110,7 @@ class MDVRPInstance():
         for depot in self.depot_indices:
             depot_to_customer[depot] = []
         
-        for idx, _ in enumerate(self.locations):
-            if idx in self.depot_indices:
-                continue 
+        for idx in self.customer_indices:
             nearest_depot = self.get_nearest_depot(idx)
             depot_to_customer[nearest_depot].append(idx)
 
@@ -125,7 +125,7 @@ class MDVRPInstance():
 
             self.solution.append([[depot, 0, input_idx]]) # to start route
             cur_load = self.capacity
-            mask = np.array([False] * (self.nb_customers + self.n_depots))
+            mask = np.array([False] * (self.nb_customers + self.n_depots+1))
             # enable only current depot and current available customers
             mask[depot] = False 
             mask[available_customers] = True

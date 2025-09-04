@@ -41,6 +41,10 @@ def create_dataset(size, config, seed=None, create_solution=False, use_cost_memo
     instances = []
     blueprints = get_blueprint(config.instance_blueprint)
 
+
+    if config.problem_type == 'mdvrp':
+        assert config.instance_blueprint in ['MD_1', 'MD_2', 'MD_3', 'MD_4', 'MD_5', 'MD_6']
+
     #if seed is not None:
     #    np.random.seed(seed)
     rng = np.random.default_rng(seed)
@@ -359,7 +363,7 @@ def read_instances_pkl(path, offset=0, num_samples=None):
         num_samples = len(data)
     
     for idx, rec in enumerate(data[offset:offset + num_samples], start=offset):
-        if not (isinstance(rec, (list, tuple)) and len(rec) == 5):
+        if not (isinstance(rec, (list, tuple)) and len(rec) == 4):
             raise ValueError(
                 f"Record #{idx}: expected 4-tuple (depots, loc, demand, capacity), got \
                 type/len={type(rec)}/{len(rec) if hasattr(rec, '__len__') else 'n/a'}"

@@ -7,34 +7,38 @@ class MDVRP_instance_test(unittest.TestCase):
     """ Tests based on the instance generated in setUp() method.
         Hand written numbers, see also `locations.ods` file as a reference """
     def setUp(self):
-        self.depot_indices = [0, 1, 2, 3]
-        self.locations = np.array([[0.53133224, 0.28243662],
-                     [0.6743981 , 0.64041828],
-                     [0.4113433 , 0.318311  ],
-                     [0.94992566, 0.03165872],
-                     [0.63494319, 0.20385504],
-                     [0.10591025, 0.9292119 ],
-                     [0.32258949, 0.16922623],
-                     [0.93441326, 0.50766116],
-                     [0.46652433, 0.22617598],
-                     [0.37048569, 0.05035837],
-                     [0.24523844, 0.67245775],
-                     [0.23323873, 0.088866  ],
-                     [0.47995916, 0.17653291],
-                     [0.83341379, 0.10344553],
-                     [0.35924599, 0.03583394],
-                     [0.61682411, 0.01871345],
-                     [0.82985747, 0.50048258],
-                     [0.92230851, 0.46465877],
-                     [0.82022165, 0.05927801],
-                     [0.65409717, 0.45940834],
-                     [0.2664566 , 0.76469668]])
+        self.depot_indices = [1, 2, 3, 4]
+        self.locations = np.array([
+                    [None      , None      ],
+                    [0.53133224, 0.28243662],
+                    [0.6743981 , 0.64041828],
+                    [0.4113433 , 0.318311  ],
+                    [0.94992566, 0.03165872],
+                    [0.63494319, 0.20385504],
+                    [0.10591025, 0.9292119 ],
+                    [0.32258949, 0.16922623],
+                    [0.93441326, 0.50766116],
+                    [0.46652433, 0.22617598],
+                    [0.37048569, 0.05035837],
+                    [0.24523844, 0.67245775],
+                    [0.23323873, 0.088866  ],
+                    [0.47995916, 0.17653291],
+                    [0.83341379, 0.10344553],
+                    [0.35924599, 0.03583394],
+                    [0.61682411, 0.01871345],
+                    [0.82985747, 0.50048258],
+                    [0.92230851, 0.46465877],
+                    [0.82022165, 0.05927801],
+                    [0.65409717, 0.45940834],
+                    [0.2664566 , 0.76469668]])
         self.original_locations = self.locations
-        self.demand = [0, 0, 0, 0, 1, 5, 6, 6, 1, 2, 2, 9, 9, 3, 5, 1, 4, 9, 3, 3, 9] 
+        self.demand = [None, 0, 0, 0, 0, 1, 5, 6, 6, 1, 2, 2, 9, 9, 3, 5, 1, 4, 9, 3, 3, 9] 
         self.capacity = 50
 
         # assert on initial data
         self.assertEqual(len(self.demand), len(self.locations))
+        self.assertEqual(self.demand[0], None)
+        self.assertTrue(np.array_equal(self.locations[0], [None, None]))
 
         for i in self.depot_indices:
             self.assertEqual(self.demand[i], 0)
@@ -70,15 +74,16 @@ class MDVRP_instance_test(unittest.TestCase):
     def test_get_n_closest_locations_to(self):
         # some hand made examples:
         closest_locs = {
-                18: 13,
-                20: 10,
-                16: 17,
-                12: 8,
-                5: 20,
+                19: 14,
+                18: 8,
+                11: 21,
+                13: 9,
+                15: 10,
                 }
         for loc in iter(closest_locs):
             known_sol = closest_locs[loc]
             mask = np.array([True] * (self.mdvrp_instance.nb_customers + self.mdvrp_instance.n_depots))
+            mask[0] = False
             mask[loc] = False
             mask[self.mdvrp_instance.depot_indices] = False
             result = self.mdvrp_instance.get_n_closest_locations_to(loc, mask, 1)[0] # testing first element only for now
@@ -88,15 +93,19 @@ class MDVRP_instance_test(unittest.TestCase):
     def test_create_initial_solution(self):
         self.mdvrp_instance.create_initial_solution()
         sol = self.mdvrp_instance.solution
+    
+        print(f"DEBUG: sol:")
+        for el in sol:
+            print(el)
         known_solution = [
-                [[0, 0, 0]],
-                [[1, 0, 1]],
-                [[2, 0, 2]],
-                [[3, 0, 3]],
-                [[0, 0, 0], [8, 1, None], [12, 9, None], [4, 1, None], [15, 1, None], [0, 0, 0]],
-                [[1, 0, 1], [19, 3, None], [16, 4, None], [17, 9, None], [7, 6, None], [20, 9, None], [5, 5, None], [1, 0, 1]],
-                [[2, 0, 2], [6, 6, None], [11, 9, None], [14, 5, None], [9, 2, None], [10, 2, None], [2, 0, 2]],
-                [[3, 0, 3], [18, 3, None], [13, 3, None], [3, 0, 3]]]
+                [[1, 0, 0]],
+                [[2, 0, 1]],
+                [[3, 0, 2]],
+                [[4, 0, 3]],
+                [[1, 0, 0], [9, 1, None], [13, 9, None], [5, 1, None], [16, 1, None], [1, 0, 0]],
+                [[2, 0, 1], [20, 3, None], [17, 4, None], [18, 9, None], [8, 6, None], [21, 9, None], [6, 5, None], [2, 0, 1]],
+                [[3, 0, 2], [7, 6, None], [12, 9, None], [15, 5, None], [10, 2, None], [11, 2, None], [3, 0, 2]],
+                [[4, 0, 3], [19, 3, None], [14, 3, None], [4, 0, 3]]]
         
         self.assertEqual(len(sol), len(known_solution))
         self.assertEqual(sol, known_solution)
@@ -311,6 +320,14 @@ class MDVRP_instance_test(unittest.TestCase):
 
         nn_input_dynamic, nn_input_static = mdvrp.get_network_input(mdvrp.get_max_nb_input_points())
         nn_input = np.concat((nn_input_dynamic, nn_input_static), axis=1)
+        print(f"\n\nIN TEST_DO_ACTION")
+        print(f"mdvrp.solution:")
+        for el in mdvrp.solution:
+            print(el)
+        print(f"\nmdvrp.incomplete_tours:")
+        for i, el in enumerate(mdvrp.incomplete_tours):
+            print(f"{i}: \t{el}")
+
         # connect incomplete tour #0 [[8, 1, 4]] to incomplete tour #4 [[11, 9, 8]]
         # 
         mdvrp.do_action(
@@ -318,6 +335,13 @@ class MDVRP_instance_test(unittest.TestCase):
             id_to=8) # incomplete tour #4 is index 8 in input vector
         self.assertIn(member=[[8, 1, 4], [11, 9, 8]], container=mdvrp.solution)
 
+        print(f"\n\nIN TEST_DO_ACTION")
+        print(f"mdvrp.solution:")
+        for el in mdvrp.solution:
+            print(el)
+        print(f"\nmdvrp.incomplete_tours:")
+        for i, el in enumerate(mdvrp.incomplete_tours):
+            print(f"{i}: \t{el}")
         # connect incomplete tour #1 [[12, 9, 5]] to incomplete tour #0 [[8, 1, 4], [11, 9, 8]]
         # 
         mdvrp.do_action(
@@ -325,11 +349,19 @@ class MDVRP_instance_test(unittest.TestCase):
             id_to=4) # incomplete tour #0 is index 4 in input vector 
         member = [[12, 9, 5], [8, 1, 4], [11, 9, 8]]
         member_reversed = list(reversed(member)) 
+
+        print(f"\n\nIN TEST_DO_ACTION")
+        print(f"mdvrp.solution:")
+        for el in mdvrp.solution:
+            print(el)
+        print(f"\nmdvrp.incomplete_tours:")
+        for i, el in enumerate(mdvrp.incomplete_tours):
+            print(f"{i}: \t{el}")
+
         self.assertTrue(
                 member in mdvrp.solution or member_reversed in mdvrp.solution,
                 f"Neither: \n{member} \nnor\n {member_reversed} \nfound in solution"
                 )
-
 
     def test_do_action2(self):
         mdvrp = self.mdvrp_instance

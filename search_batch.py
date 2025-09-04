@@ -97,6 +97,7 @@ def lns_batch_search_mp(config, model_path):
         nb_instances = config.test_size
     else:
         nb_instances = len(read_instances_pkl(config.instance_path))
+    print(f"DEBUG: instances: {read_instances_pkl(config.instance_path)}")
     assert nb_instances % config.lns_nb_cpus == 0
     test_size_per_cpu = nb_instances // config.lns_nb_cpus
 
