@@ -84,10 +84,11 @@ class MDVRPInstance():
     
         # Take the n smallest distances among the masked indices
         take = min(n, idxs.size)
+        # drop 0 if inserted
         nearest_masked_order = np.argsort(dists)[:take]   # positions within idxs
-        return idxs[nearest_masked_order]                 # original indices into self.locations
-
-
+        result = idxs[nearest_masked_order]                 # original indices into self.locations 
+        assert 0 not in result, f"Found 0 in nearest_masked_order: {nearest_masked_order}"
+        return result
 
     def get_nearest_depot(self, loc):
         x,y = self.locations[loc]
@@ -340,13 +341,11 @@ class MDVRPInstance():
 
         """
         nn_input = np.zeros((input_size, 4))
+        # fill depots lines
         nn_input[:self.n_depots, :2] = self.locations[self.depot_indices]
         nn_input[:self.n_depots, 2] = -1 * self.capacity  # Depots demand
         nn_input[:self.n_depots, 3] = -1  # Depots state
 
-        #nn_input[0, :2] = self.locations[0]  # Depot location
-        #nn_input[0, 2] = -1 * self.capacity  # Depot demand
-        #nn_input[0, 3] = -1  # Depot state
         network_input_idx_to_tour = [None] * input_size
         for d in range(self.n_depots): 
             network_input_idx_to_tour[d] = [self.solution[d], 0] #IMPORTANT: first part of solution have to be depots!!
@@ -371,11 +370,11 @@ class MDVRPInstance():
                 if tour[0][0] not in self.depot_indices:
                     nn_input[i, :2] = self.locations[tour[0][0]]
                     nn_input[i, 2] = sum(l[1] for l in tour)
-                    network_input_idx_to_tour[i] = [tour, 0]
                     if tour[-1][0] in self.depot_indices: # if route contains (i.e. ends at) a depot
                         nn_input[i, 3] = 3
                     else:
                         nn_input[i, 3] = 2
+                    network_input_idx_to_tour[i] = [tour, 0]
                     tour[0][2] = i # save network input index information in incomplete_tours
                     destroyed_location_idx.append(tour[0][0])
                     i += 1
@@ -383,26 +382,15 @@ class MDVRPInstance():
                 if tour[-1][0] not in self.depot_indices:
                     nn_input[i, :2] = self.locations[tour[-1][0]]
                     nn_input[i, 2] = sum(l[1] for l in tour)
-                    network_input_idx_to_tour[i] = [tour, len(tour) - 1]
-                    tour[-1][2] = i
                     if tour[0][0] in self.depot_indices:
                         nn_input[i, 3] = 3
                     else:
                         nn_input[i, 3] = 2
+                    network_input_idx_to_tour[i] = [tour, len(tour) - 1]
+                    tour[-1][2] = i
                     destroyed_location_idx.append(tour[-1][0])
                     i += 1
-
-       # self.open_nn_input_idx = []
-       # for tour in incomplete_tours:
-       #     if len(tour)>1:
-       #        # if first end not depot
-       #         if tour[0][0] not in self.depot_indices:
-       #             self.open_nn_input_idx.append(tour[0][2])
-       #         if tour[-1][0] not in self.depot_indices:
-       #             self.open_nn_input_idx.append(tour[-1][2])
-       #     if len(tour) == 1:
-       #         if tour[0][0] not in self.depot_indices:
-       #             self.open_nn_input_idx.append(tour[0][2])
+                
 
         self.open_nn_input_idx = list(range(self.n_depots, i))
         self.nn_input_idx_to_tour = network_input_idx_to_tour
@@ -539,9 +527,14 @@ class MDVRPInstance():
                 self.solution.insert(idx, [[d, 0, idx]])
                 self.nn_input_idx_to_tour[idx] = [self.solution[idx], 0]
 
+        depot_input_indices = [i-1 for i in self.depot_indices]
+
         for update in nn_input_update:
             #if update[2] == 0 and update[0] != 0:
-            if update[2] == 0 and update[0] not in self.depot_indices:
+            #if update[2] == 0 and update[0] not in self.depot_indices:
+            if update[2] == 0 and update[0] not in depot_input_indices:
+                if update[0] not in self.open_nn_input_idx:
+                    print(f"Didn't find {update[0]} in: \n {self.open_nn_input_idx}")
                 self.open_nn_input_idx.remove(update[0])
 
         return nn_input_update, tour_from[-1][2]
@@ -571,11 +564,12 @@ class MDVRPInstance():
 
     def verify_solution(self, config):
         """Verify that a feasible solution has been found."""
-        d = np.zeros((self.nb_customers + self.n_depots), dtype=int)
+        d = np.zeros((self.nb_customers + self.n_depots), dtype=float)
+        d[0] = np.nan
         for i in range(len(self.solution)):
             for ii in range(len(self.solution[i])):
                 d[self.solution[i][ii][0]] += self.solution[i][ii][1]
-        if (self.demand != d).any():
+        if (self.demand[1:] != d[1:]).any():
             raise Exception('Solution could not be verified.')
 
         for tour in self.solution:

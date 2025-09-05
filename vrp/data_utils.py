@@ -233,10 +233,14 @@ def read_instance_mdvrp(path):
             locations = np.loadtxt(lines[i + 1:i + 1 + dimension], dtype=float)
             #quick check on customers ids so that they follow 'the start from 1 convention'
             assert locations[0, 0] == 1, f"Error in reading {path}. Node indices start from {locations[0, 0]}, expected 1"
+            locations = np.insert(locations, 0, [0, np.nan, np.nan], axis=0)
+    
             locations = locations[:, 1:] # drop ids 
+
             i = i + dimension
         elif line.startswith('DEMAND_SECTION'):
-            demand = np.loadtxt(lines[i + 1:i + 1 + dimension], dtype=int)
+            demand = np.loadtxt(lines[i + 1:i + 1 + dimension], dtype=float)
+            demand = np.insert(demand, 0, [0, np.nan], axis=0)
             i = i + dimension
         elif line.startswith('TYPE'):
             problem_type = line.split(':')[1]
@@ -246,19 +250,18 @@ def read_instance_mdvrp(path):
             depot_indices = np.loadtxt(lines[i + 1:i + 1 + num_depots], dtype=int)
             i = i + num_depots 
         i += 1
-    
-    if ((locations > 0) & (locations < 1)).all():
+
+
+    if ((locations[1:,:] > 0) & (locations[1:,:] < 1)).all():
         #then grid size is 0, 1
         grid_size = 1
-    elif ((locations > 0) & (locations < 1000)).all():
+    elif ((locations[1:,:] > 0) & (locations[1:,:] < 1000)).all():
         #then grid size is likely 1000
         grid_size = 1000
-    elif ((locations > 0) & (locations < 1000000)).all():
+    elif ((locations[1:,:] > 0) & (locations[1:,:] < 1000000)).all():
         #then grid size is likely 1000000
         grid_size = 1000000
     else:
-        print(f"DEBUG:\n")
-        print(locations)
         raise ValueError(f"Error in estimating grid size")
     
 
@@ -275,6 +278,7 @@ def read_instance_mdvrp(path):
             demand = demand, 
             capacity = capacity,
             )
+
     return instance
 
 def read_instance_vrp(path):

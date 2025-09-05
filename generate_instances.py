@@ -26,8 +26,9 @@ def write_mdvrplib(filename, config, rng, name="problem"):
     nodes_coordinates = list(zip(node_latitudes, node_longitudes))
     demands = rng.poisson(lam=1.0, size=blueprint.nb_customers + blueprint.n_depots)
     # Replace any zeros with 1 (to avoid zero demand)
-    demands = np.where(demands == 0, 1, demands)
-    demands[depot_indices] = 0
+    demands = np.where(demands == 0, 1, demands).astype(float)
+    shifted_depot_indices = [el -1 for el in depot_indices]
+    demands[shifted_depot_indices] = 0.0
     demands = demands.tolist()
 
     with open(filename, 'w+') as f:

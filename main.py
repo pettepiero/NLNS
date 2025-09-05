@@ -60,6 +60,11 @@ if __name__ == '__main__':
         logging.info("{0}: {1}".format(arg, getattr(config, arg)))
     logging.info("----------")
 
+    if config.DEBUG:
+        import colored_traceback
+        colored_traceback.add_hook()
+
+
     if config.mode == "train":
         actor = VrpActorModel(config.device, hidden_size=config.pointer_hidden_size).to(config.device)
         critic = VrpCriticModel(config.critic_hidden_size).to(config.device)

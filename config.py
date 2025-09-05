@@ -4,6 +4,7 @@ import torch
 def get_config():
     parser = argparse.ArgumentParser(description='Neural Large Neighborhood Search')
 
+    parser.add_argument('--DEBUG', default=False, type=bool)
     parser.add_argument('--mode', default='train', type=str, choices=['train', 'eval_single', 'eval_batch', 'multi_depot'])
     parser.add_argument('--problem_type', type=str, choices=['vrp', 'mdvrp'])
     parser.add_argument('--output_path', type=str, default="")
