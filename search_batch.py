@@ -80,7 +80,6 @@ def _lns_batch_search_job(args):
         instances = create_dataset(size=test_size, config=config, seed=config.validation_seed + 1 + i)
     else:
         instances = read_instances_pkl(config.instance_path, test_size * i, test_size)
-
     lns_operations = search.load_operator_pairs(model_path, config)
 
     for instance in instances:
@@ -97,7 +96,6 @@ def lns_batch_search_mp(config, model_path):
         nb_instances = config.test_size
     else:
         nb_instances = len(read_instances_pkl(config.instance_path))
-    print(f"DEBUG: instances: {read_instances_pkl(config.instance_path)}")
     assert nb_instances % config.lns_nb_cpus == 0
     test_size_per_cpu = nb_instances // config.lns_nb_cpus
 

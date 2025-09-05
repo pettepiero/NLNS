@@ -493,8 +493,6 @@ class MDVRPInstance():
                 if t is tour_to:
                     self.solution.remove(t)
                     break
-            else:
-                raise ValueError(f"{tour_to} not found in self.solution")
             #self.solution.remove(tour_to)
             nn_input_update.extend(self._get_network_input_update_for_tour(tour_from, combined_demand))
 
@@ -510,16 +508,11 @@ class MDVRPInstance():
                     nn_input_update.append([tour_from[-1][2], 0, 0])
                 # Update solution
                 tour_from.extend(tour_to)
-
                 for t in self.solution:
                     if t is tour_to:
                         self.solution.remove(t)
                         break
-                else:
-                    print(f"ERROR: self.solution:")
-                    for el in self.solution:
-                        print(el)
-                    raise ValueError(f"{tour_to} not found in self.solution")
+
                 #self.solution.remove(tour_to)
                 # Generate input update
                 nn_input_update.extend(self._get_network_input_update_for_tour(tour_from, combined_demand))
