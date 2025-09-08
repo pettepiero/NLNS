@@ -111,6 +111,7 @@ class MDVRP_instance_test(unittest.TestCase):
         self.assertEqual(len(sol), len(known_solution))
         self.assertEqual(sol, known_solution)
 
+
     def test_destroy(self):
         self.mdvrp_instance.create_initial_solution()
         customers_to_remove = [4, 5, 14, 19, 6, 15, 17, 18]
@@ -394,13 +395,18 @@ class MDVRP_instance_test(unittest.TestCase):
         seen = {}
         duplicates = {}
 
+        print(f"DEBUG: mdvrp.solution:")
         for t in mdvrp.solution:
+            print(t)
             for node in t:
                 cust_id = node[0]
                 if cust_id in seen and cust_id not in mdvrp.depot_indices:
                     duplicates.setdefault(cust_id, []).append(t)
                 else:
                     seen[cust_id] = t
+        print(f"DEBUG: mdvrp.nn_input_idx_to_tour")
+        for el in mdvrp.nn_input_idx_to_tour:
+            print(el)
 
         self.assertEqual(len(duplicates), 0, "There are duplicate customers in solution")
 
@@ -431,6 +437,95 @@ class MDVRP_instance_test(unittest.TestCase):
         for idx in mdvrp.open_nn_input_idx:
             self.assertTrue(mdvrp.nn_input_idx_to_tour[idx] is not None)
         self.assertTrue(min(mdvrp.open_nn_input_idx) >= mdvrp.n_depots)
+
+    def test_do_action3(self):
+        mdvrp = self.mdvrp_instance
+        mdvrp.create_initial_solution()
+        rng = np.random.default_rng(12345)
+        mdvrp.destroy_point_based(p=0.3, rng=rng)
+
+        nn_input_dynamic, nn_input_static = mdvrp.get_network_input(mdvrp.get_max_nb_input_points())
+        nn_input = np.concat((nn_input_dynamic, nn_input_static), axis=1)
+
+        print(f"\n in test_do_action3:")
+        print("mdvrp.solution:")
+        for el in mdvrp.solution:
+            print(el)
+        print("\n")
+        print("mdvrp.incomplete_tours:")
+        for i, el in enumerate(mdvrp.incomplete_tours):
+            print(f"{i} - {el}")
+        print("\n")
+
+        # connect incomplete tour #6 [[3, 0, 2], [7, 6, 10]] to depot 3, i.e. [[3, 0, 2]] 
+        nn_input_update, cur_nn_input_idx = mdvrp.do_action(
+            id_from=10, # incomplete tour #6 is index 10 in input vector
+            id_to=2) # depot 3 is index 2 in input vector
+
+
+        result = [[10, 0, 0]]
+        self.assertEqual(result, nn_input_update)
+
+        print(f"DEBUG: nn_input_update after do_action:")
+        if nn_input_update is not None:
+            for el in nn_input_update:
+                print(el)
+
+        print("mdvrp.solution:")
+        for el in mdvrp.solution:
+            print(el)
+        print(f"mdvrp.nn_input_idx_to_tour:")
+        for el in mdvrp.nn_input_idx_to_tour:
+            print(el)
+
+    def test_do_action4(self):
+        mdvrp = self.mdvrp_instance
+        mdvrp.create_initial_solution()
+        rng = np.random.default_rng(12345)
+        mdvrp.destroy_point_based(p=0.3, rng=rng)
+
+        nn_input_dynamic, nn_input_static = mdvrp.get_network_input(mdvrp.get_max_nb_input_points())
+        nn_input = np.concat((nn_input_dynamic, nn_input_static), axis=1)
+
+        print(f"\n in test_do_action3:")
+        print("mdvrp.solution:")
+        for el in mdvrp.solution:
+            print(el)
+        print("\n")
+        print("mdvrp.incomplete_tours:")
+        for i, el in enumerate(mdvrp.incomplete_tours):
+            print(f"{i} - {el}")
+        print("\n")
+        demand = np.asarray(mdvrp.demand)
+        demand1 = sum(demand[[c[0] for c in mdvrp.incomplete_tours[2]]])
+        demand2 = sum(demand[[c[0] for c in mdvrp.incomplete_tours[4]]])
+
+        print(f"demands of tour: {demand[[c[0] for c in mdvrp.incomplete_tours[2]]]}")
+        print(f"demands of tour: {demand[[c[0] for c in mdvrp.incomplete_tours[4]]]}")
+
+        # connect incomplete tour #2 [[2, 0, 1], [20, 3, None], [17, 4, None], [18, 9, 6]] to incomplete tour 4 [[21, 9, 8]]
+        nn_input_update, cur_nn_input_idx = mdvrp.do_action(
+            id_from=6, # incomplete tour #2 is index 6 in input vector
+            id_to=8) # incomplete tour #4 is index 8 in input vector
+
+
+        r1 = [6, 0, 0]
+        r2 = [8, demand1+demand2, 3]
+        self.assertTrue(r1 in nn_input_update)
+        self.assertTrue(r2 in nn_input_update)
+
+        print(f"DEBUG: nn_input_update after do_action:")
+        if nn_input_update is not None:
+            for el in nn_input_update:
+                print(el)
+
+        print("mdvrp.solution:")
+        for el in mdvrp.solution:
+            print(el)
+        print(f"mdvrp.nn_input_idx_to_tour:")
+        for el in mdvrp.nn_input_idx_to_tour:
+            print(el)
+
 
     def test__rebuild_idx_mapping(self):
         mdvrp = self.mdvrp_instance
@@ -542,8 +637,16 @@ class MDVRP_instance_test(unittest.TestCase):
         # assertions
         for i, instance in enumerate(training_set):
             origin = origin_idx[i]
-            self.assertEqual(mask[i, origin], False)
+            self.assertEqual(mask[i, origin], False) # assert origin cannot be sampled again
             origin_tour, origin_pos = instance.nn_input_idx_to_tour[origin]
+
+            same_tour_idxs = [
+                j for j, entry in enumerate(instance.nn_input_idx_to_tour)
+                if entry is not None and entry[0] is origin_tour
+            ]
+            for j in same_tour_idxs:
+                self.assertFalse(mask[i, j], f"Index {j} points to same tour as origin {origin} but is not masked")
+
 
             #assert on tour and pos
             self.assertEqual(origin_tour[origin_pos][2], origin)
@@ -571,3 +674,5 @@ class MDVRP_instance_test(unittest.TestCase):
                     cand_customer = cand_tour[cand_pos][0]
                     cand_customer_demand = instance.demand[cand_customer]
                     self.assertTrue(cand_customer_demand + origin_tour[origin_pos][1] <= instance.capacity)
+
+
