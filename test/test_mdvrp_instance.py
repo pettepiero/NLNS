@@ -1,7 +1,11 @@
 import unittest
+import torch
 import numpy as np
-from vrp.mdvrp_problem import MDVRPInstance
+from vrp.mdvrp_problem import MDVRPInstance, get_mask, get_depot
+from vrp.data_utils import create_dataset
 from search import destroy_instances
+import argparse
+from copy import deepcopy
 
 class MDVRP_instance_test(unittest.TestCase):
     """ Tests based on the instance generated in setUp() method.
@@ -94,9 +98,6 @@ class MDVRP_instance_test(unittest.TestCase):
         self.mdvrp_instance.create_initial_solution()
         sol = self.mdvrp_instance.solution
     
-        print(f"DEBUG: sol:")
-        for el in sol:
-            print(el)
         known_solution = [
                 [[1, 0, 0]],
                 [[2, 0, 1]],
@@ -499,3 +500,74 @@ class MDVRP_instance_test(unittest.TestCase):
 
         self.assertEqual(result, known_result)
 
+
+    def test_get_mask(self):
+        rng = np.random.default_rng(1234)
+        batch_size = 12 
+
+        config = argparse.Namespace(
+                instance_blueprint='MD_7', 
+                problem_type='mdvrp',
+                seed=0,
+                capacity=6,
+                device='cpu',
+                split_delivery=False,
+                )
+
+        # generate batch_size instances
+        training_set = create_dataset(size=batch_size, config=config,
+                                  create_solution=True, use_cost_memory=False, seed=config.seed)
+        for instance in training_set:
+            instance.destroy_point_based(p=0.3, rng=rng)
+
+        # Create batch input
+        input_size      = max([ins.get_max_nb_input_points() for ins in training_set])
+        static_input    = np.zeros((batch_size, input_size, 2))
+        dynamic_input   = np.zeros((batch_size, input_size, 2), dtype='int')
+        origin_idx      = np.zeros((batch_size), dtype=int)
+        for i, instance in enumerate(training_set):
+            static_nn_input, dynamic_nn_input = instance.get_network_input(input_size)
+            static_input[i] = static_nn_input
+            dynamic_input[i] = dynamic_nn_input
+            if (origin_idx[i] == 0 or int(origin_idx[i]) in instance.depot_indices): #and not instance_repaired[i]:
+                if rng is None:
+                    origin_idx[i] = np.random.choice(instance.open_nn_input_idx, 1).item()
+                else:
+                    origin_idx[i] = rng.choice(instance.open_nn_input_idx, 1).item()
+
+        static_input    = torch.from_numpy(static_input).to(config.device).float()
+        dynamic_input   = torch.from_numpy(dynamic_input).to(config.device).long()
+        mask            = get_mask(origin_idx, dynamic_input, training_set, config, config.capacity).to(config.device)
+
+        # assertions
+        for i, instance in enumerate(training_set):
+            origin = origin_idx[i]
+            self.assertEqual(mask[i, origin], False)
+            origin_tour, origin_pos = instance.nn_input_idx_to_tour[origin]
+
+            #assert on tour and pos
+            self.assertEqual(origin_tour[origin_pos][2], origin)
+
+            home_depot = get_depot(origin_tour, instance.depot_indices)
+            if home_depot is not None:
+                depot_indices = deepcopy(instance.depot_indices)
+                depot_indices = [idx for idx in depot_indices if idx != home_depot]
+                known_sol = torch.Tensor([False]*len(depot_indices))
+                # allow connecting only to home_depot among depot nodes
+                self.assertEqual(np.array_equal(mask[i, depot_indices], known_sol), True)
+                self.assertEqual(mask[i, home_depot], True)
+            else:
+                self.assertEqual(np.array_equal(mask[i, instance.depot_indices], np.array([True]*len(instance.depot_indices))), True)
+
+
+            #capacity masking assertions
+            customers_of_tour = [cust[0] for cust in origin_tour]
+            sum_of_demands = sum([instance.demand[cust] for cust in customers_of_tour])
+            self.assertEqual(dynamic_input[i, origin][0], sum_of_demands)
+
+            for idx, el in enumerate(mask[i]):
+                if el.item() is True:
+                    cand_tour, cand_pos = instance.nn_input_idx_to_tour[idx]
+                    cand_customer = cand_tour[cand_pos][0]
+                    cand_customer_demand = instance.demand[cand_customer]
+                    self.assertTrue(cand_customer_demand + origin_tour[origin_pos][1] <= instance.capacity)

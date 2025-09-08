@@ -612,7 +612,20 @@ class MDVRPInstance():
 
 
 def get_mask(origin_nn_input_idx, dynamic_input, instances, config, capacity):
-    """ Returns a mask for the current nn_input"""
+    """ 
+    Returns a mask for the current nn_input
+        Parameters:
+            origin_nn_input_idx: list or th.Tensor
+                For each instance in the batch, the NN input index of the chosen origin end 
+            dynamic_input: th.Tensor (shape (B, N, 2))
+                Tensor containing demand and state for each candidate end
+            instances: list
+                List of instances in the batch
+            config: argparse.Namespace
+                Namespace of CLI config options
+            capacity: int
+                Capacity of the vehicles 
+    """
     device = dynamic_input.device
     batch_size, N, _ = dynamic_input.shape
 
@@ -622,12 +635,12 @@ def get_mask(origin_nn_input_idx, dynamic_input, instances, config, capacity):
 
     # Start with all 'alive' input positions (i.e. all non-zero ones)
     #mask = (dynamic_input[:, :, 1] != 0).cpu().long().numpy()
-    mask = (dynamic_input[:, :, 1] != 0).clone()
+    mask = (dynamic_input[:, :, 1] != 0).clone() #the not deactivated inputs
 
 
     # FIRST PART: avoid connecting both ends of the same tour or connecting to itself (creating cycles)
     for i in range(batch_size):
-        inst = instances[i]
+        inst = instances[i]  #
         depot_indices = inst.depot_indices
 
         idx_from = origin_nn_input_idx[i]   # for the i-th instance in the batch, this is the index of the tour end
@@ -650,7 +663,7 @@ def get_mask(origin_nn_input_idx, dynamic_input, instances, config, capacity):
         if home_depot is not None:
             # allow connecting only to home_depot among depot nodes
             mask[i, depot_indices] = False
-            mask[i, depot_indices] = True
+            mask[i, home_depot] = True
 
             #forbid connecting to another incomplete tour that already contains a different depot
             # here each candidate j represents a tour end
@@ -672,10 +685,10 @@ def get_mask(origin_nn_input_idx, dynamic_input, instances, config, capacity):
 
     # capacity constraints
     origin_tour_demands = dynamic_input[torch.arange(batch_size), origin_nn_input_idx, 0]
-    combined_demand = origin_tour_demands.unsqueeze(1).expand(batch_size, dynamic_input.shape[1]) + dynamic_input[:, :,
-                                                                                                    0]
+    combined_demand = origin_tour_demands.unsqueeze(1).expand(batch_size, dynamic_input.shape[1]) + dynamic_input[:, :, 0]
 
     if config.split_delivery:
+        raise NotImplementedError
         multiple_customer_tour = (dynamic_input[torch.arange(batch_size), origin_nn_input_idx, 1] > 1).unsqueeze(1).expand(
             batch_size, dynamic_input.shape[1])
 
