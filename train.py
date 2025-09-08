@@ -10,23 +10,28 @@ import datetime
 from search_batch import lns_batch_search
 import repair
 import main
-from vrp.data_utils import create_dataset
+from vrp.data_utils import create_dataset, save_dataset_pkl
 from search import LnsOperatorPair
 from tqdm import trange
 from pathlib import Path
 from plot.plot import plot_instance
 
-def train_nlns(actor, critic, run_id, config):
+def train_nlns(actor, critic, run_id, config, load_dataset=False, save_dataset=False):
     rng = np.random.default_rng(config.seed)
     batch_size = config.batch_size
 
-    logging.info("Generating training data...")
-    # Create training and validation set. The initial solutions are created greedily
-    training_set = create_dataset(size=batch_size * config.nb_batches_training_set, config=config,
-                                  create_solution=True, use_cost_memory=False, seed=config.seed)
-    logging.info("Generating validation data...")
-    validation_instances = create_dataset(size=config.valid_size, config=config, seed=config.validation_seed,
-                                          create_solution=True)
+    if not load_dataset:
+        logging.info("Generating training data...")
+        # Create training and validation set. The initial solutions are created greedily
+        training_set = create_dataset(size=batch_size * config.nb_batches_training_set, config=config, create_solution=True, use_cost_memory=False, seed=config.seed)
+        logging.info("Generating validation data...")
+        validation_instances = create_dataset(size=config.valid_size, config=config, seed=config.validation_seed, create_solution=True)
+
+        if save_dataset:
+            now_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            save_dataset_pkl(training_set, f'./datasets/{now_str}.pkl')
+    else:
+        raise NotImplementedError
 
     actor_optim = optim.Adam(actor.parameters(), lr=config.actor_lr)
     actor.train()
@@ -50,6 +55,7 @@ def train_nlns(actor, critic, run_id, config):
     start_time = datetime.datetime.now()
 
     logging.info("Starting training...")
+    
     for batch_idx in trange(1, config.nb_train_batches + 1):
     #for batch_idx in range(1, config.nb_train_batches + 1):
         # Get a batch of training instances from the training set. Training instances are generated in advance, because

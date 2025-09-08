@@ -64,7 +64,7 @@ if __name__ == '__main__':
         actor = VrpActorModel(config.device, hidden_size=config.pointer_hidden_size).to(config.device)
         critic = VrpCriticModel(config.critic_hidden_size).to(config.device)
 
-        model_path = train.train_nlns(actor, critic, run_id, config)
+        model_path = train.train_nlns(actor, critic, run_id, config, load_dataset=False, save_dataset=True)
         search.evaluate_batch_search(config, model_path)
 
         if config.video:
