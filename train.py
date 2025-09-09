@@ -10,28 +10,37 @@ import datetime
 from search_batch import lns_batch_search
 import repair
 import main
-from vrp.data_utils import create_dataset, save_dataset_pkl
+from vrp.data_utils import create_dataset, save_dataset_pkl, read_instances_pkl
 from search import LnsOperatorPair
 from tqdm import trange
 from pathlib import Path
 from plot.plot import plot_instance
+import pickle
 
-def train_nlns(actor, critic, run_id, config, load_dataset=False, save_dataset=False):
+def train_nlns(actor, critic, run_id, config):
     rng = np.random.default_rng(config.seed)
     batch_size = config.batch_size
 
-    if not load_dataset:
+    if not config.load_dataset:
         logging.info("Generating training data...")
         # Create training and validation set. The initial solutions are created greedily
         training_set = create_dataset(size=batch_size * config.nb_batches_training_set, config=config, create_solution=True, use_cost_memory=False, seed=config.seed)
         logging.info("Generating validation data...")
         validation_instances = create_dataset(size=config.valid_size, config=config, seed=config.validation_seed, create_solution=True)
 
-        if save_dataset:
+        if config.save_dataset:
             now_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-            save_dataset_pkl(training_set, f'./datasets/{now_str}.pkl')
+            save_dataset_pkl(training_set, f'./datasets/{now_str}_train.pkl')
+            save_dataset_pkl(validation_instances, f'./datasets/{now_str}_val.pkl')
     else:
-        raise NotImplementedError
+        assert config.train_filepath is not None
+        assert config.val_filepath is not None
+        assert os.path.exists(config.train_filepath)
+        assert os.path.exists(config.val_filepath)
+        with open(config.train_filepath, "rb") as f:
+            training_set = pickle.load(f)
+        with open(config.val_filepath, "rb") as f:
+            validation_instances = pickle.load(f)
 
     actor_optim = optim.Adam(actor.parameters(), lr=config.actor_lr)
     actor.train()

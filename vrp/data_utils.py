@@ -303,7 +303,8 @@ def read_instance_sd(path):
     return instance
 
 
-def read_instances_pkl(path, offset=0, num_samples=None):
+def read_instances_pkl(path, problem_type='vrp', offset=0, num_samples=None):
+
     instances = []
 
     with open(path, 'rb') as f:
@@ -319,8 +320,10 @@ def read_instances_pkl(path, offset=0, num_samples=None):
 
         locations = np.array(loc)
         demand = np.array(demand)
-
-        instance = VRPInstance(len(loc) - 1, locations, locations, demand, capacity)
+        if problem_type=='vrp':
+            instance = VRPInstance(len(loc) - 1, locations, locations, demand, capacity)
+        else:
+            instance = MDVRPInstance(len(loc) - 1, locations, locations, demand, capacity)
         instances.append(instance)
 
     return instances
