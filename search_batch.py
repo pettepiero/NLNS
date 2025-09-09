@@ -11,6 +11,7 @@ EMA_ALPHA = 0.2
 
 def lns_batch_search(instances, max_iterations, timelimit, operator_pairs, config, rng):
     if len(instances) % config.lns_batch_size != 0:
+        print(f"DEBUG: len(instances): {len(instances)} - config.lns_batch_size: {config.lns_batch_size}")
         raise Exception("Instance set size must be multiple of lns_batch_size for batch search.")
 
     costs = [instance.get_costs_memory(config.round_distances) for instance in instances]  # Costs for each instance

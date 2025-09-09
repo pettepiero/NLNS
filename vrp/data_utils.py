@@ -1,8 +1,10 @@
+import os
 import numpy as np
 from vrp.vrp_problem import VRPInstance
 from vrp.mdvrp_problem import MDVRPInstance
 import pickle
 from tqdm import trange 
+from typing import List, Union
 
 class InstanceBlueprint:
     """Describes the properties of a certain instance type (e.g. number of customers)."""
@@ -303,37 +305,40 @@ def read_instance_sd(path):
     return instance
 
 
-def read_instances_pkl(path, problem_type='vrp', offset=0, num_samples=None):
-
-    instances = []
-
-    with open(path, 'rb') as f:
-        data = pickle.load(f)
-
-    if num_samples is None:
-        num_samples = len(data)
-
-    for args in data[offset:offset + num_samples]:
-        depot, loc, demand, capacity, *args = args
-        loc.insert(0, depot)
-        demand.insert(0, 0)
-
-        locations = np.array(loc)
-        demand = np.array(demand)
-        if problem_type=='vrp':
-            instance = VRPInstance(len(loc) - 1, locations, locations, demand, capacity)
-        else:
-            instance = MDVRPInstance(len(loc) - 1, locations, locations, demand, capacity)
-        instances.append(instance)
-
-    return instances
+#def read_instances_pkl(path, problem_type='vrp', offset=0, num_samples=None):
+#
+#    instances = []
+#
+#    with open(path, 'rb') as f:
+#        data = pickle.load(f)
+#
+#    if num_samples is None:
+#        num_samples = len(data)
+#
+#    for args in data[offset:offset + num_samples]:
+#        depot, loc, demand, capacity, *args = args
+#        loc.insert(0, depot)
+#        demand.insert(0, 0)
+#
+#        locations = np.array(loc)
+#        demand = np.array(demand)
+#        if problem_type=='vrp':
+#            instance = VRPInstance(len(loc) - 1, locations, locations, demand, capacity)
+#        else:
+#            instance = MDVRPInstance(len(loc) - 1, locations, locations, demand, capacity)
+#        instances.append(instance)
+#
+#    return instances
 
 def read_instances_pkl(path, offset=0, num_samples=None):
-    instances = []
 
     with open(path, 'rb') as f:
         data = pickle.load(f)
 
+    if data and isinstance(data[0], (VRPInstance, MDVRPInstance)):
+        return data[offset:offset + (num_samples or len(data))]
+
+    instances = []
     if num_samples is None:
         num_samples = len(data)
     
@@ -444,6 +449,85 @@ def convert_data_notation(instance_path):
 
 
 def save_dataset_pkl(instances, output_path):
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
     with open(output_path, 'wb') as f:
         pickle.dump(instances, f)
     print(f"Saved dataset to {output_path}")
+
+def _coords_to_vrplib_ints(original_locations):     # scale coords to integers
+    arr = np.asarray(original_locations, dtype=float)
+    maxv = float(np.max(arr))
+    if maxv <= 1.0 + 1e-12:
+        arr = np.rint(arr * 1000.0)
+    return arr.astype(int)
+
+def _write_vrp_instance(path, inst):
+    coords = _coords_to_vrplib_ints(inst.original_locations)
+    demand = np.asarray(inst.demand, dtype=int).ravel()
+    dim = coords.shape[0]
+    cap = int(inst.capacity)
+
+    with open(path, "w") as f:
+        name = os.path.splitext(os.path.basename(path))[0]
+        f.write(f"NAME : {name}\n")
+        f.write("TYPE : CVRP\n")
+        f.write(f"DIMENSION : {dim}\n")
+        f.write(f"CAPACITY : {cap}\n")
+        f.write("NODE_COORD_SECTION\n")
+        for i, (x, y) in enumerate(coords):
+            f.write(f"{i} {int(x)} {int(y)}\n")
+        f.write("DEMAND_SECTION\n")
+        for i, d in enumerate(demand):
+            f.write(f"{i} {int(d)}\n")
+        f.write("EOF\n")
+
+def _write_mdvrp_instance(path, inst):
+    coords = _coords_to_vrplib_ints(inst.original_locations)
+    demand = np.asarray(inst.demand, dtype=int).ravel()
+    dim = coords.shape[0]
+    cap = int(inst.capacity)
+
+    depot_indices = list(map(int, inst.depot_indices))
+    num_depots = len(depot_indices)
+
+    with open(path, "w") as f:
+        name = os.path.splitext(os.path.basename(path))[0]
+        f.write(f"NAME : {name}\n")
+        f.write("TYPE : MDVRP\n")  # required by read_instance_mdvrp()
+        f.write(f"DIMENSION : {dim}\n")
+        f.write(f"CAPACITY : {cap}\n")
+        f.write(f"NUM_DEPOTS : {num_depots}\n")
+        f.write("NODE_COORD_SECTION\n")
+        for i, (x, y) in enumerate(coords):
+            f.write(f"{i+1} {int(x)} {int(y)}\n")
+        f.write("DEMAND_SECTION\n")
+        for i, d in enumerate(demand):
+            f.write(f"{i+1} {int(d)}\n")
+        f.write("DEPOT_SECTION\n")
+        for row_id, dep_idx in enumerate(depot_indices):
+            f.write(f"{row_id+1} {dep_idx}\n")
+        f.write("EOF\n")
+
+def save_dataset_vrplib(
+    instances,
+    folder: str,
+    prefix: str = "inst",
+    start_index: int = 0
+):
+    assert (isinstance(instances[0], MDVRPInstance)) or (isinstance(instances[0], VRPInstance))
+    os.makedirs(folder, exist_ok=True)
+
+    for k, inst in enumerate(instances, start=start_index):
+        if isinstance(inst, MDVRPInstance):
+            out_path = os.path.join(folder, f"{prefix}_{k:05d}.mdvrp")
+            _write_mdvrp_instance(out_path, inst)
+        elif isinstance(inst, VRPInstance):
+            out_path = os.path.join(folder, f"{prefix}_{k:05d}.vrp")
+            _write_vrp_instance(out_path, inst)
+        else:
+            raise TypeError(
+                f"Unsupported instance type at index {k}: {type(inst).__name__}. "
+                "Expected VRPInstance or MDVRPInstance."
+            )
+    print(f"Saved dataset to {folder}")
+

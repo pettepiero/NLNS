@@ -10,7 +10,7 @@ import datetime
 from search_batch import lns_batch_search
 import repair
 import main
-from vrp.data_utils import create_dataset, save_dataset_pkl, read_instances_pkl
+from vrp.data_utils import create_dataset, save_dataset_pkl, read_instances_pkl, save_dataset_vrplib
 from search import LnsOperatorPair
 from tqdm import trange
 from pathlib import Path
@@ -30,8 +30,14 @@ def train_nlns(actor, critic, run_id, config):
 
         if config.save_dataset:
             now_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-            save_dataset_pkl(training_set, f'./datasets/{now_str}_train.pkl')
-            save_dataset_pkl(validation_instances, f'./datasets/{now_str}_val.pkl')
+            if config.dataset_format == 'pkl':
+                save_dataset_pkl(training_set, f'./datasets/pkl/{now_str}_train.pkl')
+                save_dataset_pkl(validation_instances, f'./datasets/pkl/{now_str}_val.pkl')
+            elif config.dataset_format == 'vrplib':
+                save_dataset_vrplib(instances=training_set, folder=f'./datasets/vrplib/{now_str}_train/', start_index=1) 
+                save_dataset_vrplib(instances=validation_instances, folder=f'./datasets/vrplib/{now_str}_val/', start_index=1) 
+            else:
+                raise ValueError(f"Unknown dataset_format option: {config.dataset_format}")
     else:
         assert config.train_filepath is not None
         assert config.val_filepath is not None
@@ -41,6 +47,10 @@ def train_nlns(actor, critic, run_id, config):
             training_set = pickle.load(f)
         with open(config.val_filepath, "rb") as f:
             validation_instances = pickle.load(f)
+
+    print(f"DEBUG: len(validation_instances): {len(validation_instances)}")
+    print(f"DEBUG: len(training_set): {len(training_set)}")
+
 
     actor_optim = optim.Adam(actor.parameters(), lr=config.actor_lr)
     actor.train()
@@ -72,6 +82,7 @@ def train_nlns(actor, critic, run_id, config):
         training_set_batch_idx = batch_idx % config.nb_batches_training_set
         tr_instances = [deepcopy(instance) for instance in
                         training_set[training_set_batch_idx * batch_size: (training_set_batch_idx + 1) * batch_size]]
+
         # Destroy and repair the set of instances
         destroy_instances(rng, tr_instances, config.lns_destruction, config.lns_destruction_p)
         costs_destroyed = [instance.get_costs_incomplete(config.round_distances) for instance in tr_instances]

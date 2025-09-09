@@ -28,7 +28,7 @@ from critic import VrpCriticModel
 import multiprocessing
 if multiprocessing.get_start_method(allow_none=True) != "spawn":
     multiprocessing.set_start_method("spawn", force=True)
-
+from vrp.data_utils import read_instances_pkl
 
 VERSION = "0.3.0"
 
@@ -61,6 +61,16 @@ if __name__ == '__main__':
     logging.info("----------")
 
     if config.mode == "train":
+
+        if not config.load_dataset:
+            assert config.valid_size % config.lns_batch_size == 0, 'Validation size is not a multiple of lns_batch_size'
+        else:
+            assert config.val_filepath is not None
+            assert config.train_filepath is not None
+            assert os.path.exists(config.val_filepath)
+            assert os.path.exists(config.train_filepath)
+            assert len(read_instances_pkl(config.val_filepath)) % config.lns_batch_size == 0
+
         actor = VrpActorModel(config.device, hidden_size=config.pointer_hidden_size).to(config.device)
         critic = VrpCriticModel(config.critic_hidden_size).to(config.device)
 
