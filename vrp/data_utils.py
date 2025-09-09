@@ -473,6 +473,7 @@ def _write_vrp_instance(path, inst):
         f.write("TYPE : CVRP\n")
         f.write(f"DIMENSION : {dim}\n")
         f.write(f"CAPACITY : {cap}\n")
+        f.write(f"EDGE_WEIGHT_TYPE: EUC_2D\n")
         f.write("NODE_COORD_SECTION\n")
         for i, (x, y) in enumerate(coords):
             f.write(f"{i} {int(x)} {int(y)}\n")
@@ -489,6 +490,10 @@ def _write_mdvrp_instance(path, inst):
 
     depot_indices = list(map(int, inst.depot_indices))
     num_depots = len(depot_indices)
+    if min(depot_indices) == 0:
+        shift = 1
+    else:
+        shift = 0
 
     with open(path, "w") as f:
         name = os.path.splitext(os.path.basename(path))[0]
@@ -497,6 +502,7 @@ def _write_mdvrp_instance(path, inst):
         f.write(f"DIMENSION : {dim}\n")
         f.write(f"CAPACITY : {cap}\n")
         f.write(f"NUM_DEPOTS : {num_depots}\n")
+        f.write(f"EDGE_WEIGHT_TYPE: EUC_2D\n")
         f.write("NODE_COORD_SECTION\n")
         for i, (x, y) in enumerate(coords):
             f.write(f"{i+1} {int(x)} {int(y)}\n")
@@ -505,7 +511,8 @@ def _write_mdvrp_instance(path, inst):
             f.write(f"{i+1} {int(d)}\n")
         f.write("DEPOT_SECTION\n")
         for row_id, dep_idx in enumerate(depot_indices):
-            f.write(f"{row_id+1} {dep_idx}\n")
+            #f.write(f"{row_id + 1} {dep_idx + shift}\n")
+            f.write(f"{row_id + 1}\n")
         f.write("EOF\n")
 
 def save_dataset_vrplib(
