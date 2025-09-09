@@ -10,3 +10,6 @@ python3 main.py --mode train --problem_type mdvrp --instance_blueprint MD_1 --ln
 generate_data
 python altr_generate_data.py --problem mdvrp --name validation_prova --dataset_size 1000 --depot_size 3
 
+
+
+python main.py --device gpu --problem mdvrp --instance_blueprint MD_2 --nb_batches_training_set 1000 --nb_train_batches 10000 --save_dataset --dataset_format vrplib
