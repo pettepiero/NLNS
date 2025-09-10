@@ -1,5 +1,5 @@
 # Parts of this code are based on https://github.com/mveres01/pytorch-drl4vrp/blob/master/model.py
-
+from tqdm import tqdm
 import torch
 import numpy as np
 from vrp import vrp_problem
@@ -7,13 +7,19 @@ from vrp import mdvrp_problem
 import torch.nn.functional as F
 
 
-def _actor_model_forward(actor, instances, static_input, dynamic_input, config, vehicle_capacity, rng):
-    batch_size, n_points, _ = static_input.shape
-
+def get_depot_mask(batch_size, n_points, config, instances):
+    
     # depot mask per batch. Per instance, the first instance.n_depots indices are depots
     depot_mask = torch.zeros((batch_size, n_points), dtype=torch.bool, device=config.device)
     for i, inst in enumerate(instances):
         depot_mask[i, :inst.n_depots] = True
+
+    return depot_mask
+
+def _actor_model_forward(actor, instances, static_input, dynamic_input, config, vehicle_capacity, rng):
+    batch_size, n_points, _ = static_input.shape
+
+    depot_mask = get_depot_mask(batch_size, n_points, config, instances)
 
     tour_idx, tour_logp = [], []
 
@@ -24,7 +30,8 @@ def _actor_model_forward(actor, instances, static_input, dynamic_input, config, 
     while not instance_repaired.all():
         iter += 1
         # if origin_idx == 0 select the next tour end that serves as the origin at random
-        for i, instance in enumerate(instances):
+        print(f"DEBUG: iter {iter} in _actor_model_forward")
+        for i, instance in enumerate(tqdm(instances)):
             if (origin_idx[i] == 0 or int(origin_idx[i]) in instance.depot_indices) and not instance_repaired[i]:
                 if rng is None:
                     origin_idx[i] = np.random.choice(instance.open_nn_input_idx, 1).item()
@@ -32,7 +39,8 @@ def _actor_model_forward(actor, instances, static_input, dynamic_input, config, 
                     origin_idx[i] = rng.choice(instance.open_nn_input_idx, 1).item()
 
         if config.problem_type == 'mdvrp':
-            mask = mdvrp_problem.get_mask(origin_idx, dynamic_input, instances, config, vehicle_capacity).to(config.device).to(config.device)
+            mask = mdvrp_problem.get_mask(origin_idx, dynamic_input, instances, config, vehicle_capacity).to(config.device)
+            print("DEBUG: got mask")
         elif config.problem_type == 'vrp':
             mask = vrp_problem.get_mask(origin_idx, dynamic_input, instances, config, vehicle_capacity).to(config.device).float()
         else:
@@ -47,8 +55,9 @@ def _actor_model_forward(actor, instances, static_input, dynamic_input, config, 
         origin_static_input = static_input[torch.arange(batch_size), origin_idx]
         origin_dynamic_input_float = dynamic_input_float[torch.arange(batch_size), origin_idx]
 
+        print(f"DEBUG: calling actor.forward")
         # Forward pass. Returns a probability distribution over the point (tour end or depot) that origin should be connected to
-        probs = actor.forward(
+        logits = actor.forward(
                 static_input                = static_input, 
                 dynamic_input_float         = dynamic_input_float,
                 origin_static_input         = origin_static_input, 
@@ -56,18 +65,26 @@ def _actor_model_forward(actor, instances, static_input, dynamic_input, config, 
                 mask                        = mask,
                 depot_mask                  = depot_mask
                 )
-        probs = probs.masked_fill(~mask, float('-inf'))
-        probs = F.softmax(probs, dim=1)
+        print(f"DEBUG: actor.forward is done")
+        #masked_logits = logits.masked_fill(~mask, float('-inf'))
+        masked_logits = logits.masked_fill(~mask, -1e9)
+        probs = F.softmax(masked_logits, dim=1)
         #probs = F.softmax(probs + mask.log(), dim=1)  # Set prob of masked tour ends to zero
 
         if actor.training:
-            m = torch.distributions.Categorical(probs)
-
+            print(f"DEBUG: in actor.training")
+            m = torch.distributions.Categorical(probs=probs)
+            #m = torch.distributions.Categorical(logits=masked_logits)
+            print(f"DEBUG: sampled m")
             # Sometimes an issue with Categorical & sampling on GPU; See:
             # https://github.com/pemami4911/neural-combinatorial-rl-pytorch/issues/5
             ptr = m.sample()
-            while not torch.gather(mask, 1, ptr.data.unsqueeze(1)).byte().all():
-                ptr = m.sample()
+            #print(f"DEBUG: type(masked_logist): {type(masked_logits)}")
+            #print(f"DEBUG: ptr : {ptr}")
+            print(f"Entering while loop")
+            #while not torch.gather(mask, 1, ptr.data.unsqueeze(1)).byte().all():
+            #    ptr = m.sample()
+            print(f"Out of while")
             logp = m.log_prob(ptr)
         else:
             prob, ptr = torch.max(probs, 1)  # Greedy selection
@@ -76,7 +93,8 @@ def _actor_model_forward(actor, instances, static_input, dynamic_input, config, 
         # Perform action  for all instances sequentially
         nn_input_updates = []
         ptr_np = ptr.cpu().numpy()
-        for i, instance in enumerate(instances):
+        print(f"DEBUG: performing actions")
+        for i, instance in enumerate(tqdm(instances)):
             idx_from = origin_idx[i].item()
             idx_to = ptr_np[i]
             if idx_from in instance.depot_indices and idx_to in instance.depot_indices:  # No need to update in this case
@@ -123,15 +141,13 @@ def repair(instances, actor, config, critic=None, rng=None):
     # Create batch input
     static_input = np.zeros((batch_size, nb_input_points, 2))
     dynamic_input = np.zeros((batch_size, nb_input_points, 2), dtype='int')
-    for i, instance in enumerate(instances):
+    print(f"DEBUG: looping over instances in repair:")
+    for i, instance in enumerate(tqdm(instances)):
         static_nn_input, dynamic_nn_input = instance.get_network_input(nb_input_points)
         static_input[i] = static_nn_input
         dynamic_input[i] = dynamic_nn_input
 
-    #for el in instances:
-        #print(f"\t{el.open_nn_input_idx}")
-        #print(f"\t{el.incomplete_tours}")
-
+    print(f"DEBUG: finished loop in repair")
     static_input = torch.from_numpy(static_input).to(config.device).float()
     dynamic_input = torch.from_numpy(dynamic_input).to(config.device).long()
     vehicle_capacity = instances[0].capacity # Assumes that the vehicle capcity is identical for all instances of the batch
@@ -139,6 +155,8 @@ def repair(instances, actor, config, critic=None, rng=None):
     cost_estimate = None
     if critic is not None:
         cost_estimate = _critic_model_forward(critic, static_input, dynamic_input, vehicle_capacity)
+    print(f"DEBUG: calling _actor_model_forward")
     tour_idx, tour_logp = _actor_model_forward(actor, instances, static_input, dynamic_input, config, vehicle_capacity, rng)
 
     return tour_idx, tour_logp, cost_estimate
+

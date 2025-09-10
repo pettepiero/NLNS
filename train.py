@@ -10,9 +10,9 @@ import datetime
 from search_batch import lns_batch_search
 import repair
 import main
-from vrp.data_utils import create_dataset, save_dataset_pkl, read_instances_pkl, save_dataset_vrplib
+from vrp.data_utils import create_dataset, save_dataset_pkl, read_instances_pkl, save_dataset_vrplib, read_instance_mdvrp
 from search import LnsOperatorPair
-from tqdm import trange
+from tqdm import tqdm, trange
 from pathlib import Path
 from plot.plot import plot_instance
 import pickle
@@ -38,18 +38,64 @@ def train_nlns(actor, critic, run_id, config):
                 save_dataset_vrplib(instances=validation_instances, folder=f'./datasets/vrplib/{now_str}_val/', start_index=1) 
             else:
                 raise ValueError(f"Unknown dataset_format option: {config.dataset_format}")
+#################################################################
+        # reading dataset from dir or single pkl file
     else:
         assert config.train_filepath is not None
         assert config.val_filepath is not None
         assert os.path.exists(config.train_filepath)
         assert os.path.exists(config.val_filepath)
-        with open(config.train_filepath, "rb") as f:
-            training_set = pickle.load(f)
-        with open(config.val_filepath, "rb") as f:
-            validation_instances = pickle.load(f)
+       
+        # if from directory containing multiple files         
+        if os.path.isdir(config.train_filepath):
+            # check that there are files that end with 'mdvrp' or 'vrp'
+            train_instances = [ins for ins in os.listdir(config.train_filepath) if os.path.isfile(os.path.join(config.train_filepath, ins))]
+            train_instances = [ins for ins in train_instances if os.path.splitext(ins)[1] in ['.mdvrp', 'vrp']]
+            print(f"Found {len(train_instances)} train instances")
+
+            val_instances = [ins for ins in os.listdir(config.val_filepath) if os.path.isfile(os.path.join(config.val_filepath, ins))]
+            validation_instances = [ins for ins in val_instances if os.path.splitext(ins)[1] in ['.mdvrp', 'vrp']]
+            print(f"Found {len(val_instances)} val instances")
+            #convert to mdvrpinstance list
+            print("Converting instances from files to VRPInstance/MDVRPInstance list...")
+            training_set = []
+            validation_instances = []
+            if config.problem_type == 'mdvrp':
+                for el in tqdm(train_instances):
+                    instance = read_instance_mdvrp(os.path.join(config.train_filepath, el))
+                    instance.create_initial_solution()
+                    training_set.append(instance)
+                for el in tqdm(val_instances):
+                    instance = read_instance_mdvrp(os.path.join(config.val_filepath, el))
+                    instance.create_initial_solution()
+                    validation_instances.append(instance)
+            elif config.problem_type == 'vrp':
+                for el in tqdm(train_instances):
+                    instance = read_instance_vrp(os.path.join(config.train_filepath, el))
+                    instance.create_initial_solution()
+                    training_set.append(instance)
+                for el in tqdm(val_instances):
+                    instance = read_instance_vrp(os.path.join(config.val_filepath, el))
+                    instance.create_initial_solution()
+                    validation_instances.append(instance)
+            else:
+                raise ValueError('Problem in config.problem_type: {config.problem_type}')
+            print("...done")
+            assert len(val_instances) % config.lns_batch_size == 0
+        
+        # if from single pkl file
+        elif os.path.splitext(config.train_filepath)[1] == '.pkl' and os.path.splitext(config.val_filepath)[1] == '.pkl':
+            with open(config.train_filepath, "rb") as f:
+                training_set = pickle.load(f)
+            with open(config.val_filepath, "rb") as f:
+                validation_instances = pickle.load(f)
+#############################################################################################àààà
 
     print(f"DEBUG: len(validation_instances): {len(validation_instances)}")
     print(f"DEBUG: len(training_set): {len(training_set)}")
+
+    print(f"training_set[0] = {training_set[0]}")
+
 
 
     actor_optim = optim.Adam(actor.parameters(), lr=config.actor_lr)
@@ -82,10 +128,12 @@ def train_nlns(actor, critic, run_id, config):
         training_set_batch_idx = batch_idx % config.nb_batches_training_set
         tr_instances = [deepcopy(instance) for instance in
                         training_set[training_set_batch_idx * batch_size: (training_set_batch_idx + 1) * batch_size]]
+        logging.info("Created tr_instances...")
 
         # Destroy and repair the set of instances
         destroy_instances(rng, tr_instances, config.lns_destruction, config.lns_destruction_p)
         costs_destroyed = [instance.get_costs_incomplete(config.round_distances) for instance in tr_instances]
+        logging.info("Destroyed instances...")
         tour_indices, tour_logp, critic_est = repair.repair(tr_instances, actor, config, critic, rng)
         costs_repaired = [instance.get_costs(config.round_distances) for instance in tr_instances]
         # Reward/Advantage computation
@@ -93,6 +141,7 @@ def train_nlns(actor, critic, run_id, config):
         reward = torch.from_numpy(reward).float().to(config.device)
         advantage = reward - critic_est
 
+        logging.info("Computed advantage...")
         # Actor loss computation and backpropagation
         actor_loss = torch.mean(advantage.detach() * tour_logp.sum(dim=1))
         actor_optim.zero_grad()
@@ -100,6 +149,7 @@ def train_nlns(actor, critic, run_id, config):
         torch.nn.utils.clip_grad_norm_(actor.parameters(), config.max_grad_norm)
         actor_optim.step()
 
+        logging.info("Did actor optim step...")
         # Critic loss computation and backpropagation
         critic_loss = torch.mean(advantage ** 2)
         critic_optim.zero_grad()
@@ -107,6 +157,7 @@ def train_nlns(actor, critic, run_id, config):
         torch.nn.utils.clip_grad_norm_(critic.parameters(), config.max_grad_norm)
         critic_optim.step()
 
+        logging.info("Did critic optim step...")
         rewards.append(torch.mean(reward.detach()).item())
         losses_actor.append(torch.mean(actor_loss.detach()).item())
         losses_critic.append(torch.mean(critic_loss.detach()).item())

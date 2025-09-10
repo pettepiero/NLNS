@@ -320,8 +320,9 @@ class MDVRPInstance():
     def get_max_nb_input_points(self):
         """For the current instance, returns the number of input vectors required to describe the
         incomplete solution. """
-        if self.incomplete_tours is None:
-            self.incomplete_tours = self._get_incomplete_tours()
+        #if self.incomplete_tours is None:
+        #    self.incomplete_tours = self._get_incomplete_tours()
+        self.incomplete_tours = self._get_incomplete_tours()
 
         incomplete_tours = self.incomplete_tours
         nb = self.n_depots  # input point for each depot
@@ -458,6 +459,9 @@ class MDVRPInstance():
          presented by the input with id id_to."""
 
         tour_from = self.nn_input_idx_to_tour[id_from][0]  # Tour that should be connected
+        if self.nn_input_idx_to_tour[id_to] is None:
+            print(id_to)
+        print(f" -> {self.nn_input_idx_to_tour[id_to]}")
         tour_to = self.nn_input_idx_to_tour[id_to][0]  # to this tour.
         pos_from = self.nn_input_idx_to_tour[id_from][1]  # Position of the location that should be connected in tour_from
         pos_to = self.nn_input_idx_to_tour[id_to][1]  # Position of the location that should be connected in tour_to
@@ -487,6 +491,8 @@ class MDVRPInstance():
         # Case 1
         if len(tour_from) > 1 and len(tour_to) > 1:
             combined_demand = sum(l[1] for l in tour_from) + sum(l[1] for l in tour_to)
+            if combined_demand > self.capacity:
+                print(f"DEBUG: combined_demand: {combined_demand} > self.capacity: {self.capacity}")
             assert combined_demand <= self.capacity  # This is ensured by the masking schema
 
             # The two incomplete tours are combined to one (in)complete tour. All network inputs associated with the
@@ -631,7 +637,20 @@ class MDVRPInstance():
 
 
 def get_mask(origin_nn_input_idx, dynamic_input, instances, config, capacity):
-    """ Returns a mask for the current nn_input"""
+    """
+    Returns a mask for the current nn_input
+        Parameters:
+            origin_nn_input_idx: list or th.Tensor
+                For each instance in the batch, the NN input index of the chosen origin end
+            dynamic_input: th.Tensor (shape (B, N, 2))
+                Tensor containing demand and state for each candidate end
+            instances: list
+                List of instances in the batch
+            config: argparse.Namespace
+                Namespace of CLI config options
+            capacity: int
+                Capacity of the vehicles
+    """
     device = dynamic_input.device
     batch_size, N, _ = dynamic_input.shape
 
@@ -669,7 +688,7 @@ def get_mask(origin_nn_input_idx, dynamic_input, instances, config, capacity):
         if home_depot is not None:
             # allow connecting only to home_depot among depot nodes
             mask[i, depot_indices] = False
-            mask[i, depot_indices] = True
+            mask[i, home_depot] = True
 
             #forbid connecting to another incomplete tour that already contains a different depot
             # here each candidate j represents a tour end
@@ -697,6 +716,7 @@ def get_mask(origin_nn_input_idx, dynamic_input, instances, config, capacity):
     if config.split_delivery:
         multiple_customer_tour = (dynamic_input[torch.arange(batch_size), origin_nn_input_idx, 1] > 1).unsqueeze(1).expand(
             batch_size, dynamic_input.shape[1])
+        raise NotImplementedError
 
         # If the origin tour consists of multiple customers mask all tours with multiple customers where
         # the combined demand is > 1

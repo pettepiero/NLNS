@@ -1,4 +1,5 @@
 import os
+from copy import deepcopy
 import numpy as np
 from vrp.vrp_problem import VRPInstance
 from vrp.mdvrp_problem import MDVRPInstance
@@ -87,7 +88,7 @@ def generate_Instance(blueprint, use_cost_memory, rng):
             depot_positions.append(pos)
 
         customer_position = get_customer_position(blueprint, rng)
-        original_locations = depot_positions
+        original_locations = deepcopy(depot_positions)
         for pos in customer_position:
             original_locations.append(pos)
 
@@ -113,7 +114,7 @@ def generate_Instance(blueprint, use_cost_memory, rng):
 def get_depot_position(blueprint, rng):
     if blueprint.depot_position == 'R':
         if blueprint.grid_size == 1:
-            return rng.uniform(size=(1, 2))
+            return rng.uniform(size=2)
         elif blueprint.grid_size == 1000:
             return rng.integers(0, 1001, 2)
         elif blueprint.grid_size == 1000000:
@@ -129,19 +130,49 @@ def get_depot_position(blueprint, rng):
         raise Exception("Unknown depot position")
 
 
+#def get_customer_position_clustered(nb_customers, blueprint, rng):
+#    assert blueprint.grid_size == 1000
+#    random_centers = rng.integers(0, 1001, (blueprint.nb_customers_cluster, 2))
+#    customer_positions = []
+#    while len(customer_positions) + blueprint.nb_customers_cluster < nb_customers:
+#        random_point = rng.integers(0, 1001, (1, 2))
+#        a = random_centers
+#        b = np.repeat(random_point, blueprint.nb_customers_cluster, axis=0)
+#        distances = np.sqrt(np.sum((a - b) ** 2, axis=1))
+#        acceptance_prob = np.sum(np.exp(-distances / 40))
+#        if acceptance_prob > rng.random():
+#            customer_positions.append(random_point[0])
+#    return np.concatenate((random_centers, np.array(customer_positions)), axis=0)
+
 def get_customer_position_clustered(nb_customers, blueprint, rng):
-    assert blueprint.grid_size == 1000
-    random_centers = rng.integers(0, 1001, (blueprint.nb_customers_cluster, 2))
-    customer_positions = []
-    while len(customer_positions) + blueprint.nb_customers_cluster < nb_customers:
-        random_point = rng.integers(0, 1001, (1, 2))
-        a = random_centers
-        b = np.repeat(random_point, blueprint.nb_customers_cluster, axis=0)
-        distances = np.sqrt(np.sum((a - b) ** 2, axis=1))
-        acceptance_prob = np.sum(np.exp(-distances / 40))
-        if acceptance_prob > rng.random():
-            customer_positions.append(random_point[0])
+    if blueprint.grid_size >= 1000:
+        random_centers = rng.integers(0, blueprint.grid_size+1, (blueprint.nb_customers_cluster, 2))
+        customer_positions = []
+        while len(customer_positions) + blueprint.nb_customers_cluster < nb_customers:
+            random_point = rng.integers(0, blueprint.grid_size+1, (1, 2))
+            a = random_centers
+            b = np.repeat(random_point, blueprint.nb_customers_cluster, axis=0)
+            distances = np.sqrt(np.sum((a - b) ** 2, axis=1))
+            acceptance_prob = np.sum(np.exp(-distances / 0.04*blueprint.grid_size))
+            if acceptance_prob > rng.random():
+               customer_positions.append(random_point[0])
+
+    elif blueprint.grid_size == 1:
+        random_centers = rng.random(size=(blueprint.nb_customers_cluster, 2))
+        customer_positions = []
+        while len(customer_positions) + blueprint.nb_customers_cluster < nb_customers:
+            random_point = rng.random(size=(1, 2))
+            a = random_centers
+            b = np.repeat(random_point, blueprint.nb_customers_cluster, axis=0)
+            distances = np.sqrt(np.sum((a - b) ** 2, axis=1))
+            acceptance_prob = np.sum(np.exp(-distances / 0.04*blueprint.grid_size))
+            if acceptance_prob > rng.random():
+                customer_positions.append(random_point[0])
+    else:
+        raise ValueError(f"blueprint.grid_size is neither >=1000 nor 1")
+
     return np.concatenate((random_centers, np.array(customer_positions)), axis=0)
+
 
 
 def get_customer_position(blueprint, rng):
@@ -240,7 +271,7 @@ def read_instance_mdvrp(path):
     original_locations = locations[:, 1:]
     locations = original_locations / 1000
     demand = demand[:, 1:].squeeze()
-    depot_indices = depot_indices[:, 1:].squeeze()
+    #depot_indices = depot_indices[:, 1:].squeeze()
     depot_indices = depot_indices.tolist()
 
     instance = MDVRPInstance(

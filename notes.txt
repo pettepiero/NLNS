@@ -10,3 +10,18 @@ python3 main.py --mode train --problem_type mdvrp --instance_blueprint MD_1 --ln
 generate_data
 python altr_generate_data.py --problem mdvrp --name validation_prova --dataset_size 1000 --depot_size 3
 
+
+# train new
+python main.py --problem mdvrp --instance_blueprint MD_2 --nb_batches_training_set 1000 --nb_train_batches 10000 --save_dataset True --dataset_format vrplib --lns_batch_size 100
+
+#datasets of ^ training (big)
+./datasets/vrplib/2025-09-09_18-11-32_train/
+./datasets/vrplib/2025-09-09_18-11-32_val/
+
+# datasets (smaller)
+./datasets/vrplib/2025-09-10_11-28-56_train/
+./datasets/vrplib/2025-09-10_11-28-56_val/
+
+# datasets (even smaller)
+./datasets/vrplib/2025-09-10_12-12-51_train/
+./datasets/vrplib/2025-09-10_12-12-51_val/

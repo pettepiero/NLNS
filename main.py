@@ -29,12 +29,16 @@ import multiprocessing
 if multiprocessing.get_start_method(allow_none=True) != "spawn":
     multiprocessing.set_start_method("spawn", force=True)
 from vrp.data_utils import read_instances_pkl
+import torch
 
 VERSION = "0.3.0"
 
 if __name__ == '__main__':
     run_id = np.random.randint(10000, 99999)
     config = config.get_config()
+
+    if config.seed is not None:
+        torch.manual_seed(config.seed)
 
     # Creating output directories
     if config.output_path == "":
@@ -69,7 +73,22 @@ if __name__ == '__main__':
             assert config.train_filepath is not None
             assert os.path.exists(config.val_filepath)
             assert os.path.exists(config.train_filepath)
-            assert len(read_instances_pkl(config.val_filepath)) % config.lns_batch_size == 0
+
+            if os.path.isdir(config.train_filepath) and os.path.isdir(config.val_filepath):
+                # check that there are files that end with 'mdvrp' or 'vrp'
+                train_instances = [ins for ins in os.listdir(config.train_filepath) if os.path.isfile(os.path.join(config.train_filepath, ins))]
+                train_instances = [ins for ins in train_instances if os.path.splitext(ins)[1] in ['.mdvrp', '.vrp']]
+
+                val_instances = [ins for ins in os.listdir(config.val_filepath) if os.path.isfile(os.path.join(config.val_filepath, ins))]
+                val_instances = [ins for ins in val_instances if os.path.splitext(ins)[1] in ['.mdvrp', '.vrp']]
+                assert len(val_instances) % config.lns_batch_size == 0
+                del train_instances, val_instances
+
+            elif os.path.splitext(config.train_filepath)[1] == '.pkl' and os.path.splitext(config.val_filepath)[1] == '.pkl':
+                raise NotImplementedError 
+                assert len(read_instances_pkl(config.val_filepath)) % config.lns_batch_size == 0
+            else:
+                raise ValueError('Error in config.train_filepath')
 
         actor = VrpActorModel(config.device, hidden_size=config.pointer_hidden_size).to(config.device)
         critic = VrpCriticModel(config.critic_hidden_size).to(config.device)
