@@ -459,9 +459,13 @@ class MDVRPInstance():
          presented by the input with id id_to."""
 
         tour_from = self.nn_input_idx_to_tour[id_from][0]  # Tour that should be connected
+        print(f" -> self.nn_input_idx_to_tour[{id_to}] = {self.nn_input_idx_to_tour[id_to]}")
         if self.nn_input_idx_to_tour[id_to] is None:
-            print(id_to)
-        print(f" -> {self.nn_input_idx_to_tour[id_to]}")
+            print(f"Failed on id_to: {id_to}")
+            print(f"self.nn_input_idx_to_tour:")
+            for el in self.nn_input_idx_to_tour:
+                print(el)
+            print("\n")
         tour_to = self.nn_input_idx_to_tour[id_to][0]  # to this tour.
         pos_from = self.nn_input_idx_to_tour[id_from][1]  # Position of the location that should be connected in tour_from
         pos_to = self.nn_input_idx_to_tour[id_to][1]  # Position of the location that should be connected in tour_to
@@ -493,6 +497,8 @@ class MDVRPInstance():
             combined_demand = sum(l[1] for l in tour_from) + sum(l[1] for l in tour_to)
             if combined_demand > self.capacity:
                 print(f"DEBUG: combined_demand: {combined_demand} > self.capacity: {self.capacity}")
+                print(f"DEBUG: failed connecting tour_from: {tour_from} to tour_to: {tour_to}")
+                print("\n")
             assert combined_demand <= self.capacity  # This is ensured by the masking schema
 
             # The two incomplete tours are combined to one (in)complete tour. All network inputs associated with the
@@ -710,13 +716,12 @@ def get_mask(origin_nn_input_idx, dynamic_input, instances, config, capacity):
 
     # capacity constraints
     origin_tour_demands = dynamic_input[torch.arange(batch_size), origin_nn_input_idx, 0]
-    combined_demand = origin_tour_demands.unsqueeze(1).expand(batch_size, dynamic_input.shape[1]) + dynamic_input[:, :,
-                                                                                                    0]
+    combined_demand     = origin_tour_demands.unsqueeze(1).expand(batch_size, dynamic_input.shape[1]) + dynamic_input[:, :, 0]
 
     if config.split_delivery:
+        raise NotImplementedError
         multiple_customer_tour = (dynamic_input[torch.arange(batch_size), origin_nn_input_idx, 1] > 1).unsqueeze(1).expand(
             batch_size, dynamic_input.shape[1])
-        raise NotImplementedError
 
         # If the origin tour consists of multiple customers mask all tours with multiple customers where
         # the combined demand is > 1
@@ -731,6 +736,22 @@ def get_mask(origin_nn_input_idx, dynamic_input, instances, config, capacity):
         #mask[combined_demand > capacity] = 0
         mask &= ~(combined_demand > capacity)
 
+    #guarantee at least one valid action per row
+    for i in range(batch_size):
+        if not mask[i].any():
+            inst = instances[i]
+            # Recover the origin tour to know the "home" depot (if any)
+            origin_idx_i = int(origin_nn_input_idx[i])
+            origin_tour, _ = inst.nn_input_idx_to_tour[origin_idx_i]
+            home_depot = get_depot(origin_tour, inst.depot_indices)
+
+            # Reset depot choices according to your policy
+            if home_depot is not None:
+                mask[i, inst.depot_indices] = False
+                mask[i, home_depot] = True
+            else:
+                # No depot yet in the origin tour: allow all depots
+                mask[i, inst.depot_indices] = True
     return mask
 
 def get_depot(tour: list, depot_indices: list):

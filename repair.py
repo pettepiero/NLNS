@@ -57,7 +57,7 @@ def _actor_model_forward(actor, instances, static_input, dynamic_input, config, 
 
         print(f"DEBUG: calling actor.forward")
         # Forward pass. Returns a probability distribution over the point (tour end or depot) that origin should be connected to
-        logits = actor.forward(
+        probs = actor.forward(
                 static_input                = static_input, 
                 dynamic_input_float         = dynamic_input_float,
                 origin_static_input         = origin_static_input, 
@@ -67,9 +67,9 @@ def _actor_model_forward(actor, instances, static_input, dynamic_input, config, 
                 )
         print(f"DEBUG: actor.forward is done")
         #masked_logits = logits.masked_fill(~mask, float('-inf'))
-        masked_logits = logits.masked_fill(~mask, -1e9)
-        probs = F.softmax(masked_logits, dim=1)
+        #probs = F.softmax(masked_logits, dim=1)
         #probs = F.softmax(probs + mask.log(), dim=1)  # Set prob of masked tour ends to zero
+
 
         if actor.training:
             print(f"DEBUG: in actor.training")
@@ -82,6 +82,15 @@ def _actor_model_forward(actor, instances, static_input, dynamic_input, config, 
             #print(f"DEBUG: type(masked_logist): {type(masked_logits)}")
             #print(f"DEBUG: ptr : {ptr}")
             print(f"Entering while loop")
+            valid = mask.gather(1, ptr.unsqueeze(1)).squeeze(1)
+            tries = 0
+            while (~valid).any():
+                new_ptr = m.sample()
+                ptr = torch.where(valid, ptr, new_ptr)
+                valid = mask.gather(1, ptr_squeeze(1)).squeeze(1)
+                tries += 1
+                if tries > 1000:
+                    raise RuntimeError("Could not sample a valid action")
             #while not torch.gather(mask, 1, ptr.data.unsqueeze(1)).byte().all():
             #    ptr = m.sample()
             print(f"Out of while")
