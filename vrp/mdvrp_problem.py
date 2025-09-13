@@ -461,7 +461,6 @@ class MDVRPInstance():
         tour_from = self.nn_input_idx_to_tour[id_from][0]  # Tour that should be connected
         if self.nn_input_idx_to_tour[id_to] is None:
             print(id_to)
-        print(f" -> {self.nn_input_idx_to_tour[id_to]}")
         tour_to = self.nn_input_idx_to_tour[id_to][0]  # to this tour.
         pos_from = self.nn_input_idx_to_tour[id_from][1]  # Position of the location that should be connected in tour_from
         pos_to = self.nn_input_idx_to_tour[id_to][1]  # Position of the location that should be connected in tour_to
@@ -670,7 +669,7 @@ def get_mask(origin_nn_input_idx, dynamic_input, instances, config, capacity):
 
         idx_from = origin_nn_input_idx[i]   # for the i-th instance in the batch, this is the index of the tour end
                                             # we want to connect from
-
+        
         # Find the start of the tour in the nn input
         origin_tour, origin_pos = inst.nn_input_idx_to_tour[idx_from]
 

@@ -273,6 +273,9 @@ def read_instance_mdvrp(path):
     demand = demand[:, 1:].squeeze()
     #depot_indices = depot_indices[:, 1:].squeeze()
     depot_indices = depot_indices.tolist()
+    if min(depot_indices) != 0:
+        depot_indices = [idx-1 for idx in depot_indices]
+    assert min(depot_indices) == 0, f"Error in depot_indices convention"
 
     instance = MDVRPInstance(
             depot_indices = depot_indices,
@@ -461,9 +464,6 @@ def convert_data_notation(instance_path):
     locations[:, 0] = locations[:, 0] + 1
     demand[:, 0] = demand[:, 0] + 1
 
-    print(f"DEBUG: locations:")
-    for el in locations:
-        print(el)
     original_locations = locations[:, 1:] 
     locations = original_locations / 1000
     demand = demand[:, 1:].squeeze()
