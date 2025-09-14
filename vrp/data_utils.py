@@ -6,6 +6,8 @@ from vrp.mdvrp_problem import MDVRPInstance
 import pickle
 from tqdm import trange 
 from typing import List, Union
+from pyvrp import Solution, ProblemData, Route
+from pyvrp import read as pyvrp_read
 
 class InstanceBlueprint:
     """Describes the properties of a certain instance type (e.g. number of customers)."""
@@ -569,3 +571,27 @@ def save_dataset_vrplib(
             )
     print(f"Saved dataset to {folder}")
 
+#def NLNS_ins_to_pyvrp_sol(instance_path: str, final_instance: MDVRPInstance):
+#    if not instance_path or not os.path.isfile(instance_path):
+#        raise SystemExit("Provide a valid --instance_path to a VRPLIB file.")
+#    problem_data = pyvrp_read(instance_path)
+#    print(f"DEBUG: read problem_data: {problem_data}")
+#    
+#    routes = []
+#    for route in final_instance.solution:
+#        visits = [el[0] for el in route] 
+#        #routes.append(Route(data=problem_data, visits=visits, vehicle_type=0)) 
+#        routes.append(visits) 
+#
+#    print(f"DEBUG: routes: {routes}")
+#
+#    sol = Solution(
+#        data=problem_data,
+#        routes=routes
+#        )
+#
+#    return sol
+
+
+class FakeSolutionObject():
+    def __init__(self, routes: list, 

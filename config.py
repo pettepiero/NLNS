@@ -49,6 +49,7 @@ def get_config():
     parser.add_argument('--train_filepath', default=None, type=str)
     parser.add_argument('--val_filepath', default=None, type=str)
     parser.add_argument('--dataset_format', default=None, type=str, choices=['vrplib', 'pkl'])
+    parser.add_argument('--plot_solution', '--plot-solution', default=False, action='store_true')
 
     config = parser.parse_args()
 

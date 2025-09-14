@@ -4,13 +4,14 @@ import os
 import time
 import torch
 import search_single
-from vrp.data_utils import read_instances_pkl, read_instance
+from vrp.data_utils import read_instances_pkl, read_instance, NLNS_ins_to_pyvrp_sol
 import glob
 import search_batch
 from actor import VrpActorModel
 from dummy_model import dummy_model
 from vrp.mdvrp_problem import MDVRPInstance
 from tqdm import trange
+from pyvrp.plotting import plot_solution
 
 class LnsOperatorPair:
     def __init__(self, model, destroy_procedure, p_destruction):
@@ -96,7 +97,7 @@ def evaluate_single_search(config, model_path, instance_path):
     for i, instance_path in enumerate(instance_files_path):
         if instance_path.endswith(".pkl") or instance_path.endswith(".vrp") or instance_path.endswith(".sd") or instance_path.endswith(".mdvrp"):
             for jj in range(config.nb_runs):
-                cost, duration = search_single.lns_single_search_mp(instance_path, config.lns_timelimit, config,
+                cost, duration, final_instance = search_single.lns_single_search_mp(instance_path, config.lns_timelimit, config,
                                                                     model_path, i)
                 instance_names.append(instance_path)
                 costs.append(cost)
@@ -105,11 +106,19 @@ def evaluate_single_search(config, model_path, instance_path):
     output_path = os.path.join(config.output_path, "search", 'results.txt')
     results = np.array(list(zip(instance_names, costs, durations)))
 
+    print(f"DEBUG: final_instance: \n{final_instance}")
+
     np.savetxt(output_path, results, delimiter=',', fmt=['%s', '%s', '%s'], header="name, cost, runtime")
 
     logging.info(
         f"NLNS single search evaluation results: Total Nb. Runs: {len(costs)}, "
         f"Mean Costs: {np.mean(costs):.3f} Mean Runtime (s): {np.mean(durations):.1f}")
+
+    if config.plot_solution:
+        #solution = NLNS_ins_to_pyvrp_sol(instance_path=config.instance_path, final_instance=final_instance)
+        fake_solution_object = 
+
+        plot_solution(solution)
 
 def evaluate_multi_depot_search(config, instance_path):
     assert instance_path is not None, "No instance path given"

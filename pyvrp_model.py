@@ -122,7 +122,6 @@ def main():
             pyvrp.plotting.plot_demands(data=inst, title=f"{args.instance_path} instance")
         name = os.path.basename(args.instance_path)
         summary, res = solve_instance(name, inst, args.max_time)
-        print(f"type(res.best): {type(res.best)}")
         print(f"{summary['instance']}: cost={summary['cost']} time_s={summary['time_s']}")
         print(summary["repr"])
         if args.plot_diversity:
@@ -131,9 +130,6 @@ def main():
             pyvrp.plotting.plot_result(result=res, data=inst)
         if args.plot_solution:
             pyvrp.plotting.plot_solution(solution=res.best, data=inst)
-
-
-
         return
 
     # batch eval

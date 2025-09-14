@@ -5,7 +5,7 @@ import torch
 class MDVRPInstance():
     """ 
     Generalization of VRPInstance to MD case.
-
+    
     Attributes 
     ----------
     nb_customers: int
@@ -33,7 +33,7 @@ class MDVRPInstance():
     incomplete_tours: list
         List of incomplete tours of self.solution
     """
-
+    
     def __init__(self, depot_indices, locations, original_locations, demand, capacity, use_cost_memory=True):
         self.nb_customers = len(locations)-len(depot_indices)
         assert self.nb_customers > 0, f"Error in nb_customers"
@@ -47,7 +47,7 @@ class MDVRPInstance():
         self.demand = demand  # demand for each customer (integer). Values are divided by capacity right before being
         # fed to the network
         self.capacity = capacity  # capacity of the vehicle
-
+    
         self.solution = None  # List of tours. Each tour is a list of location elements. Each location element is a
         # list with three values [i_l, d, i_n], with i_l being the index of the location,
         # d being the fulfilled demand of customer i_l by that tour, and
@@ -61,14 +61,20 @@ class MDVRPInstance():
             self.costs_memory = np.full((self.nb_customers + self.n_depots, self.nb_customers + self.n_depots), np.nan, dtype="float")
         else:
             self.costs_memory = None
-
+    
     #def get_n_closest_locations_to(self, origin_location_id, mask, n):
         #"""Return the idx of the n closest locations sorted by distance."""
         #distances = np.array([np.inf] * len(mask))
         #distances[mask] = ((self.locations[mask] * self.locations[origin_location_id]) ** 2).sum(1)
         #order = np.argsort(distances)
         #return order[:n]
-
+    def __str__(self):
+        return f" \
+            'nb_customers': {self.nb_customers},\n \
+            'depot_indices': {self.depot_indices},\n \
+            'solution': {self.solution}, \n \
+            'cost': {self.get_costs(True)}"
+    
     def get_n_closest_locations_to(self, origin_location_id, mask, n):
         """Return the idx of the n closest locations (Euclidean) sorted by distance."""
         locs = self.locations
@@ -84,9 +90,9 @@ class MDVRPInstance():
         take = min(n, idxs.size)
         nearest_masked_order = np.argsort(dists)[:take]   # positions within idxs
         return idxs[nearest_masked_order]                 # original indices into self.locations
-
-
-
+    
+    
+    
     def get_nearest_depot(self, loc):
         x,y = self.locations[loc]
         min_dist = np.inf 
@@ -97,12 +103,12 @@ class MDVRPInstance():
             if dist < min_dist:
                 min_dist = dist
                 closest_depot = d
-
+    
         return closest_depot 
-
+    
     def create_initial_solution(self):
         """Create an initial solution for this instance using a greedy heuristic."""
-
+    
         #1 create clusters for each depot
         depot_to_customer = {} # dict mapping depot id to list of customers in cluster
         for depot in self.depot_indices:
@@ -113,23 +119,23 @@ class MDVRPInstance():
                 continue 
             nearest_depot = self.get_nearest_depot(idx)
             depot_to_customer[nearest_depot].append(idx)
-
+    
         self.solution = []
         for input_idx, depot in enumerate(self.depot_indices):
             self.solution.append([[depot, 0, input_idx]]) # for depot only
-
+    
         # 2 do normal NLNS VRP greedy solution inside each cluster
         # use mask to only see some customers
         for input_idx, depot in enumerate(self.depot_indices):
             available_customers = depot_to_customer[depot]
-
+    
             self.solution.append([[depot, 0, input_idx]]) # to start route
             cur_load = self.capacity
             mask = np.array([False] * (self.nb_customers + self.n_depots))
             # enable only current depot and current available customers
             mask[depot] = False 
             mask[available_customers] = True
-
+    
             while mask.any():
                 closest_customer_idx = self.get_n_closest_locations_to(self.solution[-1][-1][0], mask, 1)[0]
                 if self.demand[closest_customer_idx] <= cur_load:
@@ -141,7 +147,7 @@ class MDVRPInstance():
                     self.solution.append([[depot, 0, input_idx]])
                     cur_load = self.capacity
             self.solution[-1].append([depot, 0, input_idx])
-
+    
     def get_costs_memory(self, round):
         """Return the cost of the current complete solution. Uses a memory to improve performance."""
         c = 0

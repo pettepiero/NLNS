@@ -137,7 +137,9 @@ def lns_single_search_mp(instance_path, timelimit, config, model_path, pkl_insta
     duration = time.time() - start_time
     instance.verify_solution(config)
     # plot final instance 
-    plot_instance(instance, f"{dir_path}/final_snapshot.png")
-    return instance.get_costs(config.round_distances), duration
+    plot_path = f"{dir_path}/final_snapshot.png"
+    plot_instance(instance, plot_path)
+    print(f"Plotted result to {plot_path}")
+    return instance.get_costs(config.round_distances), duration, instance
 
 
