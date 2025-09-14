@@ -8,6 +8,7 @@ from tqdm import trange
 from typing import List, Union
 from pyvrp import Solution, ProblemData, Route
 from pyvrp import read as pyvrp_read
+from typing import Iterable, List
 
 class InstanceBlueprint:
     """Describes the properties of a certain instance type (e.g. number of customers)."""
@@ -592,6 +593,76 @@ def save_dataset_vrplib(
 #
 #    return sol
 
+class PlotRoute:
+    """
+    A lightweight route: a sequence of client indices (no depots inside),
+    plus the start/end depot indices. Created to be plottable by plot_solution of PyVRP.
+    """
+    def __init__(self, visits: Iterable[int], start_depot: int, end_depot: int):
+        self._visits: List[int] = [int(v) for v in visits]   # clients only
+        self._start = int(start_depot)
+        self._end = int(end_depot)
 
-class FakeSolutionObject():
-    def __init__(self, routes: list, 
+        if len(self._visits) == 0:
+            raise ValueError("PlotRoute requires at least one client for plot_solution().")
+
+    # --- what plot_solution needs ---
+    def __len__(self) -> int:
+        return len(self._visits)
+
+    def __iter__(self):
+        return iter(self._visits)
+
+    def __getitem__(self, i: int) -> int:
+        return self._visits[i]
+
+    def __array__(self, dtype=None):
+        # lets NumPy treat `route` as an index array: x_coords[route]
+        arr = np.asarray(self._visits, dtype=np.intp)
+        return arr if dtype is None else arr.astype(dtype, copy=False)
+
+    def start_depot(self) -> int:
+        return self._start
+
+    def end_depot(self) -> int:
+        return self._end
+
+
+class PlotSolution:
+    """
+    Minimal "solution" wrapper exposing .routes() -> iterable[PlotRoute]. Created to be plottable by plot_solution of PyVRP.
+    """
+    def __init__(self, routes: Iterable[PlotRoute]):
+        self._routes = list(routes)
+
+    def routes(self) -> Iterable[PlotRoute]:
+        return self._routes
+
+
+def mdvrp_to_plot_solution(inst) -> PlotSolution:
+    """
+    Converts MDVRPInstance.solution (list of tours of [node, demand, nn_idx])
+    into a PlotSolution that plot_solution() can draw.
+
+    Keeps only complete tours that start and end at a depot and have >= 1 client.
+    """
+    assert inst.solution is not None, "Instance has no solution to plot."
+
+    routes: List[PlotRoute] = []
+    depot_set = set(inst.depot_indices)
+
+    for tour in inst.solution:
+        # Skip depot placeholders or incomplete tours
+        if len(tour) < 3:
+            continue
+        start, end = tour[0][0], tour[-1][0]
+        if start not in depot_set or end not in depot_set:
+            # Incomplete: skip (or handle specially if you want to visualize partial routes)
+            continue
+
+        # Middle of the tour should be only clients; still filter out any accidental depots
+        visits = [node for (node, _, _) in tour[1:-1] if node not in depot_set]
+        if visits:
+            routes.append(PlotRoute(visits=visits, start_depot=start, end_depot=end))
+
+    return PlotSolution(routes)

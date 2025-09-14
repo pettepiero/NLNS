@@ -4,7 +4,7 @@ import os
 import time
 import torch
 import search_single
-from vrp.data_utils import read_instances_pkl, read_instance, NLNS_ins_to_pyvrp_sol
+from vrp.data_utils import read_instances_pkl, read_instance, mdvrp_to_plot_solution
 import glob
 import search_batch
 from actor import VrpActorModel
@@ -12,6 +12,7 @@ from dummy_model import dummy_model
 from vrp.mdvrp_problem import MDVRPInstance
 from tqdm import trange
 from pyvrp.plotting import plot_solution
+from pyvrp import read as pyvrp_read
 
 class LnsOperatorPair:
     def __init__(self, model, destroy_procedure, p_destruction):
@@ -115,10 +116,9 @@ def evaluate_single_search(config, model_path, instance_path):
         f"Mean Costs: {np.mean(costs):.3f} Mean Runtime (s): {np.mean(durations):.1f}")
 
     if config.plot_solution:
-        #solution = NLNS_ins_to_pyvrp_sol(instance_path=config.instance_path, final_instance=final_instance)
-        fake_solution_object = 
-
-        plot_solution(solution)
+        sol = mdvrp_to_plot_solution(final_instance)
+        data = pyvrp_read(instance_path) 
+        plot_solution(sol, data, plot_clients=True)
 
 def evaluate_multi_depot_search(config, instance_path):
     assert instance_path is not None, "No instance path given"
