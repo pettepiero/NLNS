@@ -2,6 +2,7 @@ import argparse
 import os
 import time
 import pyvrp
+from pyvrp import plotting
 
 def solve_batch(batch_dir: str, max_time: float):
     assert os.path.isdir(batch_dir)
@@ -50,7 +51,7 @@ def solve_instance(name: str, instance, max_time: float):
         "cost": cost,
         "repr": str(res),
     }
-    return summary
+    return summary, res
 
 
 def main():
@@ -79,17 +80,59 @@ def main():
         default=10.0,
         help="Max runtime per instance in seconds (float).",
     )
-
+    parser.add_argument(
+        "--plot_coordinates", "--plot-coordinates",
+        dest='plot_coordinates',
+        action='store_true',
+        help="Plot instance coordinates for eval_single mode.",
+    )
+    parser.add_argument(
+        "--plot_demands", "--plot-demands",
+        dest='plot_demands',
+        action='store_true',
+        help="Plot instance demands for eval_single mode.",
+    )
+    parser.add_argument(
+        "--plot_diversity", "--plot-diversity",
+        dest='plot_diversity',
+        action='store_true',
+        help="Plot instance diversity for eval_single mode.",
+    )
+    parser.add_argument(
+        "--plot_result", "--plot-result",
+        dest='plot_result',
+        action='store_true',
+        help="Plot instance result for eval_single mode.",
+    )
+    parser.add_argument(
+        "--plot_solution", "--plot-solution",
+        dest='plot_solution',
+        action='store_true',
+        help="Plot instance solution for eval_single mode.",
+    )
     args = parser.parse_args()
 
     if args.mode == "eval_single":
         if not args.instance_path or not os.path.isfile(args.instance_path):
             raise SystemExit("Provide a valid --instance_path to a VRPLIB file.")
         inst = pyvrp.read(args.instance_path)
+        if args.plot_coordinates:
+            pyvrp.plotting.plot_coordinates(data=inst, title=f"{args.instance_path} instance")
+        if args.plot_demands:
+            pyvrp.plotting.plot_demands(data=inst, title=f"{args.instance_path} instance")
         name = os.path.basename(args.instance_path)
-        summary = solve_instance(name, inst, args.max_time)
+        summary, res = solve_instance(name, inst, args.max_time)
+        print(f"type(res.best): {type(res.best)}")
         print(f"{summary['instance']}: cost={summary['cost']} time_s={summary['time_s']}")
         print(summary["repr"])
+        if args.plot_diversity:
+            pyvrp.plotting.plot_diversity(res)
+        if args.plot_result:
+            pyvrp.plotting.plot_result(result=res, data=inst)
+        if args.plot_solution:
+            pyvrp.plotting.plot_solution(solution=res.best, data=inst)
+
+
 
         return
 
