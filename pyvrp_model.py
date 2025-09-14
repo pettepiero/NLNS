@@ -90,8 +90,10 @@ def main():
         summary = solve_instance(name, inst, args.max_time)
         print(f"{summary['instance']}: cost={summary['cost']} time_s={summary['time_s']}")
         print(summary["repr"])
+
         return
 
+    # batch eval
     if not args.dataset_dir or not os.path.isdir(args.dataset_dir):
         raise SystemExit("Provide a valid --dataset_dir pointing to a folder of VRPLIB files.")
 

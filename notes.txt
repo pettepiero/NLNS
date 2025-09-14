@@ -15,8 +15,9 @@ python altr_generate_data.py --problem mdvrp --name validation_prova --dataset_s
 python main.py --problem mdvrp --instance_blueprint MD_2 --nb_batches_training_set 1000 --nb_train_batches 10000 --save_dataset True --dataset_format vrplib --lns_batch_size 100
 
 #datasets of ^ training (big)
-./datasets/vrplib/2025-09-09_18-11-32_train/
-./datasets/vrplib/2025-09-09_18-11-32_val/
+
+./datasets/vrplib/2025-09-13_15-54-46_train/
+./datasets/vrplib/2025-09-13_15-54-46_val/
 
 # datasets (smaller)
 ./datasets/vrplib/2025-09-10_11-28-56_train/

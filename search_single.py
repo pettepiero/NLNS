@@ -124,7 +124,7 @@ def lns_single_search_mp(instance_path, timelimit, config, model_path, pkl_insta
         except pyqueue.Empty:
             continue
         # Receive the incumbent solution from a finished search process (reheating iteration finished)
-        result = queue_results.get()
+        #result = queue_results.get()
         if result != 0:
             if result[1] < incumbent_costs:
                 incumbent_costs = result[1]

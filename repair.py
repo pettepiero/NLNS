@@ -29,7 +29,7 @@ def _actor_model_forward(actor, instances, static_input, dynamic_input, config, 
     while not instance_repaired.all():
         iter += 1
         # if origin_idx == 0 select the next tour end that serves as the origin at random
-        for i, instance in enumerate(tqdm(instances)):
+        for i, instance in enumerate(instances):
             if (origin_idx[i] == 0 or int(origin_idx[i]) in instance.depot_indices) and not instance_repaired[i]:
                 if rng is None:
                     origin_idx[i] = np.random.choice(instance.open_nn_input_idx, 1).item()
@@ -44,52 +44,6 @@ def _actor_model_forward(actor, instances, static_input, dynamic_input, config, 
             raise ValueError(
                 f"Problem in config.problem_type: expected either 'mdvrp' or 'vrp', got {config.problem_type}."
             ) 
-
-        ##########################################################################à
-        ##########################################################################à
-        ## TESTING THE MASK #######################################################
-        #for i, instance in enumerate(instances):
-        #    origin = origin_idx[i]
-#       #     assert mask[i, origin] == False, f"Origin can still be sampled in instance {i} - iteration {i}" # assert origin cannot be sampled again
-        #    origin_tour, origin_pos = instance.nn_input_idx_to_tour[origin]
-
-        #    same_tour_idxs = [
-        #        j for j, entry in enumerate(instance.nn_input_idx_to_tour)
-        #        if entry is not None and entry[0] is origin_tour
-        #    ]
-        #    assert len(same_tour_idxs) <= 2, f"Error in same_tour_idx: {same_tour_idxs} for origin_tour: {origin_tour}"
-        #    for j in same_tour_idxs:
-        #        assert mask[i, j] == False, f"Failed on iter: {iter}, i: {i}, j: {j}"
-
-        #    #assert on tour and pos
-        #    assert origin_tour[origin_pos][2] == origin
-
-        #    home_depot = mdvrp_problem.get_depot(origin_tour, instance.depot_indices)
-        #    if home_depot is not None:
-        #        depot_indices = deepcopy(instance.depot_indices)
-        #        depot_indices = [idx for idx in depot_indices if idx != home_depot]
-        #        known_sol = torch.Tensor([False]*len(depot_indices))
-        #        # allow connecting only to home_depot among depot nodes
-        #        assert np.array_equal(mask[i, depot_indices], known_sol)
-        #        assert mask[i, home_depot] == True, f"mask[i, home_depot]: {mask[i, home_depot]}"
-        #    else:
-        #        assert np.array_equal(mask[i, instance.depot_indices], np.array([True]*len(instance.depot_indices)))
-
-        #    #capacity masking assertions
-        #    customers_of_tour = [cust[0] for cust in origin_tour]
-        #    sum_of_demands = sum([instance.demand[cust] for cust in customers_of_tour])
-        #    assert dynamic_input[i, origin][0] == sum_of_demands
-
-        #    for idx, el in enumerate(mask[i]):
-        #        if el.item() is True:
-        #            cand_tour, cand_pos = instance.nn_input_idx_to_tour[idx]
-        #            cand_customer = cand_tour[cand_pos][0]
-        #            cand_customer_demand = instance.demand[cand_customer]
-        #            assert cand_customer_demand + origin_tour[origin_pos][1] <= instance.capacity
-        ##########################################################################à
-        ##########################################################################à
-
-
             
         # Rescale customer demand based on vehicle capacity
         dynamic_input_float = dynamic_input.float()
@@ -130,8 +84,7 @@ def _actor_model_forward(actor, instances, static_input, dynamic_input, config, 
         # Perform action  for all instances sequentially
         nn_input_updates = []
         ptr_np = ptr.cpu().numpy()
-        print(f"Performing actions:")
-        for i, instance in enumerate(tqdm(instances)):
+        for i, instance in enumerate(instances):
             idx_from = origin_idx[i].item()
             idx_to = ptr_np[i]
             if idx_from in instance.depot_indices and idx_to in instance.depot_indices:  # No need to update in this case
@@ -179,7 +132,7 @@ def repair(instances, actor, config, critic=None, rng=None):
     # Create batch input
     static_input = np.zeros((batch_size, nb_input_points, 2))
     dynamic_input = np.zeros((batch_size, nb_input_points, 2), dtype='int')
-    for i, instance in enumerate(tqdm(instances)):
+    for i, instance in enumerate(instances):
         static_nn_input, dynamic_nn_input = instance.get_network_input(nb_input_points)
         static_input[i] = static_nn_input
         dynamic_input[i] = dynamic_nn_input

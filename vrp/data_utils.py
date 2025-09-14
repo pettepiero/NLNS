@@ -153,7 +153,7 @@ def get_customer_position_clustered(nb_customers, blueprint, rng):
             a = random_centers
             b = np.repeat(random_point, blueprint.nb_customers_cluster, axis=0)
             distances = np.sqrt(np.sum((a - b) ** 2, axis=1))
-            acceptance_prob = np.sum(np.exp(-distances / 0.04*blueprint.grid_size))
+            acceptance_prob = np.sum(np.exp(-distances / (0.04*blueprint.grid_size)))
             if acceptance_prob > rng.random():
                customer_positions.append(random_point[0])
 
@@ -165,7 +165,7 @@ def get_customer_position_clustered(nb_customers, blueprint, rng):
             a = random_centers
             b = np.repeat(random_point, blueprint.nb_customers_cluster, axis=0)
             distances = np.sqrt(np.sum((a - b) ** 2, axis=1))
-            acceptance_prob = np.sum(np.exp(-distances / 0.04*blueprint.grid_size))
+            acceptance_prob = np.sum(np.exp(-distances / (0.04*blueprint.grid_size)))
             if acceptance_prob > rng.random():
                 customer_positions.append(random_point[0])
     else:

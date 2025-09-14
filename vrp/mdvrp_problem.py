@@ -459,7 +459,6 @@ class MDVRPInstance():
          presented by the input with id id_to."""
 
         tour_from = self.nn_input_idx_to_tour[id_from][0]  # Tour that should be connected
-        print(f" -> self.nn_input_idx_to_tour[{id_to}] = {self.nn_input_idx_to_tour[id_to]}")
         if self.nn_input_idx_to_tour[id_to] is None:
             print(id_to)
         tour_to = self.nn_input_idx_to_tour[id_to][0]  # to this tour.
