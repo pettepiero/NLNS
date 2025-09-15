@@ -2,7 +2,7 @@ import argparse
 import os
 import time
 import pyvrp
-from pyvrp import plotting
+from pyvrp import plotting, Model
 
 def solve_batch(batch_dir: str, max_time: float):
     assert os.path.isdir(batch_dir)
@@ -12,14 +12,12 @@ def solve_batch(batch_dir: str, max_time: float):
     filenames = os.listdir(batch_dir)
     filenames = [f for f in filenames if os.path.isfile(f)]
 
-
 def load_vrplib_dir(dirname: str):
     exts = {".vrp", ".vrplib", ".mdvrp"}  # be liberal about extensions
     items = []
     for fn in sorted(os.listdir(dirname)):
         path = os.path.join(dirname, fn)
-        if not os.path.isfile(path):
-            continue
+        if not os.path.isfile(path): continue
         _, ext = os.path.splitext(fn)
         if ext.lower() in exts:
             try:
@@ -30,6 +28,44 @@ def load_vrplib_dir(dirname: str):
         raise RuntimeError(f"No VRPLIB files found in: {dirname}")
     return items
 
+#def solve_instance_with_model(name: str, instance, max_time: float, v_per_depot: int, capacity: int):
+def solve_instance_with_model(name: str, instance, max_time: float, v_per_depot: int):
+    m = Model()
+    for idx in range(instance.num_depots):
+        depot = m.add_depot(x=instance.location(idx).x, y=instance.location(idx).y)
+
+        #v_per_depot vehicles per depot with capacity capacity
+        m.add_vehicle_type(
+            v_per_depot,
+            start_depot=depot,
+            end_depot=depot,
+        )
+    for idx in range(instance.num_depots, instance.num_clients):
+        m.add_client(
+            x=instance.location(idx).x,
+            y=instance.location(idx).y
+        )
+
+    start = time.perf_counter()
+    res = m.solve(stop=pyvrp.stop.MaxRuntime(max_time))
+    elapsed = time.perf_counter() - start
+
+    cost = None
+    try:
+        cost = res.cost()          
+    except Exception:
+        try:
+            cost = res.objective()
+        except Exception:
+            pass
+
+    summary = {
+        "instance": name,
+        "time_s": round(elapsed, 3),
+        "cost": cost,
+        "repr": str(res),
+    }
+    return summary, res
 
 def solve_instance(name: str, instance, max_time: float):
     start = time.perf_counter()
@@ -110,6 +146,18 @@ def main():
         action='store_true',
         help="Plot instance solution for eval_single mode.",
     )
+    #parser.add_argument(
+    #    "--capacity",
+    #    type=int,
+    #    default=[50, 50],
+    #    help="Capacity of the vehicles. Default=50",
+    #)
+    parser.add_argument(
+        "--v_per_depot",
+        type=int,
+        default=4,
+        help="Max number of vehicles per depot",
+    )
     args = parser.parse_args()
 
     if args.mode == "eval_single":
@@ -122,6 +170,14 @@ def main():
             pyvrp.plotting.plot_demands(data=inst, title=f"{args.instance_path} instance")
         name = os.path.basename(args.instance_path)
         summary, res = solve_instance(name, inst, args.max_time)
+        summary, res = solve_instance_with_model(
+                            name        = name, 
+                            instance    = inst,
+                            max_time    = args.max_time,
+                            v_per_depot = args.v_per_depot, 
+                            #capacity    = args.capacity
+                            )
+ 
         print(f"{summary['instance']}: cost={summary['cost']} time_s={summary['time_s']}")
         print(summary["repr"])
         if args.plot_diversity:
