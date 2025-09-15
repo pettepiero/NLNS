@@ -114,6 +114,7 @@ def main():
 
     if args.mode == "eval_single":
         if not args.instance_path or not os.path.isfile(args.instance_path):
+            print(f"Passed: {args.instance_path}")
             raise SystemExit("Provide a valid --instance_path to a VRPLIB file.")
         inst = pyvrp.read(args.instance_path)
         if args.plot_coordinates:
