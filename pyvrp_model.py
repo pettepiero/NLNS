@@ -171,13 +171,15 @@ def main():
             pyvrp.plotting.plot_demands(data=inst, title=f"{args.instance_path} instance")
         name = os.path.basename(args.instance_path)
         summary, res = solve_instance(name, inst, args.max_time)
-        summary, res = solve_instance_with_model(
-                            name        = name, 
-                            instance    = inst,
-                            max_time    = args.max_time,
-                            v_per_depot = args.v_per_depot, 
-                            #capacity    = args.capacity
-                            )
+        print(f"DEBUG: inst.num_depots: {inst.num_depots}")
+        print(f"DEBUG: inst.num_vehicles: {inst.num_vehicles}")
+        #summary, res = solve_instance_with_model(
+        #                    name        = name, 
+        #                    instance    = inst,
+        #                    max_time    = args.max_time,
+        #                    v_per_depot = args.v_per_depot, 
+        #                    #capacity    = args.capacity
+        #                    )
  
         print(f"{summary['instance']}: cost={summary['cost']} time_s={summary['time_s']}")
         print(summary["repr"])
