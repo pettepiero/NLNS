@@ -437,7 +437,10 @@ def read_instances_pkl(path, offset=0, num_samples=None):
     return instances
 
 
-def convert_data_notation(instance_path):
+def read_vrplib_to_mdvrpinstance(instance_path):
+    """
+    Reads a VRPLIB formatted instance and returns a MDVRPInstance object
+    """
     file = open(instance_path, 'r')
     lines = [ll.strip() for ll in file]
     i = 0
