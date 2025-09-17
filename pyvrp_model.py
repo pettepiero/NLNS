@@ -72,7 +72,8 @@ locations = depots + clients
 
 for frm_idx, frm in enumerate(locations):
     for to_idx, to in enumerate(locations):
-        distance = abs(frm.x - to.x) + abs(frm.y - to.y)  # Manhattan
+        #distance = abs(frm.x - to.x) + abs(frm.y - to.y)  # Manhattan
+        distance = np.sqrt((frm.x - to.x)**2 + (frm.y - to.y)**2) 
         m.add_edge(frm, to, distance=distance)
 
 result = m.solve(stop=MaxRuntime(args.max_time), display=True)

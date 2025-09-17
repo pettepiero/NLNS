@@ -107,8 +107,6 @@ def evaluate_single_search(config, model_path, instance_path):
     output_path = os.path.join(config.output_path, "search", 'results.txt')
     results = np.array(list(zip(instance_names, costs, durations)))
 
-    print(f"DEBUG: final_instance: \n{final_instance}")
-
     np.savetxt(output_path, results, delimiter=',', fmt=['%s', '%s', '%s'], header="name, cost, runtime")
 
     logging.info(
@@ -128,7 +126,7 @@ def evaluate_single_search(config, model_path, instance_path):
     logging.info(f"\t# clients: {final_instance.nb_customers}")
     logging.info(f"\t# n_depots: {final_instance.n_depots}")
     logging.info(f"\t# depot indices: {final_instance.depot_indices}")
-    logging.info(f"\t# distance: {final_instance.get_cost}")
+    logging.info(f"\t# distance: {final_instance.get_costs}")
 
 def evaluate_multi_depot_search(config, instance_path):
     assert instance_path is not None, "No instance path given"
