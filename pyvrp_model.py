@@ -1,213 +1,87 @@
+# NOTE: if this code fails for unhashable numpy type, add following line in vrplib parse_section function:
+
+#        if name == "vehicles_depot":
+#            data = np.array([row[0] for row in rows])
+#        else:
+#            data = np.array([row[1:] for row in rows])
+
+
+
 import argparse
-import os
-import time
-import pyvrp
-from pyvrp import plotting, Model
+from pyvrp import Model, read
+from pyvrp.stop import MaxRuntime
+from pyvrp.plotting import plot_solution, plot_coordinates
+import matplotlib.pyplot as plt
+import numpy as np
+from vrplib.read import read_instance
 
-def solve_batch(batch_dir: str, max_time: float):
-    assert os.path.isdir(batch_dir)
-    instances = []
-    sum_of_distances = []
-    
-    filenames = os.listdir(batch_dir)
-    filenames = [f for f in filenames if os.path.isfile(f)]
+parser = argparse.ArgumentParser(description="PyVRP model execution")
+parser.add_argument(
+    "--instance_path",
+    default=None,
+    type=str,
+    help="Path to one VRPLIB file",
+)
+parser.add_argument(
+    "--max_time",
+    type=float,
+    default=10.0,
+    help="Max runtime per instance in seconds (float).",
+)
+parser.add_argument(
+    "--plot_solution", "--plot-solution",
+    dest='plot_solution',
+    action='store_true',
+    help="Plot instance solution.",
+)
+args = parser.parse_args()
 
-def load_vrplib_dir(dirname: str):
-    exts = {".vrp", ".vrplib", ".mdvrp"}  # be liberal about extensions
-    items = []
-    for fn in sorted(os.listdir(dirname)):
-        path = os.path.join(dirname, fn)
-        if not os.path.isfile(path): continue
-        _, ext = os.path.splitext(fn)
-        if ext.lower() in exts:
-            try:
-                items.append((fn, pyvrp.read(path)))
-            except Exception as e:
-                print(f"[WARN] Skipping {fn}: cannot read as VRPLIB ({e})")
-    if not items:
-        raise RuntimeError(f"No VRPLIB files found in: {dirname}")
-    return items
+data = read_instance(args.instance_path)
+assert isinstance(data['capacity'], int)
+m = Model()
+num_depots = len(data['depot'])
+depots = []
+for d in data['depot']:
+    depot = m.add_depot(x=data['node_coord'][d][0], y=data['node_coord'][d][1])
+    depots.append(depot)
 
-#def solve_instance_with_model(name: str, instance, max_time: float, v_per_depot: int, capacity: int):
-def solve_instance_with_model(name: str, instance, max_time: float, v_per_depot: int):
-    m = Model()
-    for idx in range(instance.num_depots):
-        depot = m.add_depot(x=instance.location(idx).x, y=instance.location(idx).y)
+keys, counts = np.unique(data['vehicles_depot'], return_counts=True)
+keys = keys - 1
+keys = keys.tolist()
+counts = counts.tolist()
+depot_num_vehicles =  dict(zip(keys, counts))
 
-        #v_per_depot vehicles per depot with capacity capacity
-        m.add_vehicle_type(
-            v_per_depot,
-            start_depot=depot,
-            end_depot=depot,
-        )
-    for idx in range(instance.num_depots, instance.num_clients):
-        m.add_client(
-            x=instance.location(idx).x,
-            y=instance.location(idx).y
-        )
-
-    start = time.perf_counter()
-    res = m.solve(stop=pyvrp.stop.MaxRuntime(max_time))
-    elapsed = time.perf_counter() - start
-
-    cost = None
-    try:
-        cost = res.cost()          
-    except Exception:
-        try:
-            cost = res.objective()
-        except Exception:
-            pass
-
-    summary = {
-        "instance": name,
-        "time_s": round(elapsed, 3),
-        "cost": cost,
-        "repr": str(res),
-    }
-    return summary, res
-
-def solve_instance(name: str, instance, max_time: float):
-    start = time.perf_counter()
-    res = pyvrp.solve(instance, stop=pyvrp.stop.MaxRuntime(max_time))
-    elapsed = time.perf_counter() - start
-
-    cost = None
-    try:
-        cost = res.cost()          
-    except Exception:
-        try:
-            cost = res.objective()
-        except Exception:
-            pass
-
-    summary = {
-        "instance": name,
-        "time_s": round(elapsed, 3),
-        "cost": cost,
-        "repr": str(res),
-    }
-    return summary, res
-
-
-def main():
-    parser = argparse.ArgumentParser(description="PyVRP model execution")
-    parser.add_argument(
-        "--mode",
-        default="eval_batch",
-        choices=["eval_single", "eval_batch"],
-        help="Run a single file or a whole folder of VRPLIB instances",
+for i, d in enumerate(data['depot']):
+    m.add_vehicle_type(
+        num_available   = depot_num_vehicles[int(d)],
+        capacity        = data['capacity'],
+        start_depot     = depots[i],
+        end_depot       = depots[i],
     )
-    parser.add_argument(
-        "--dataset_dir",
-        default=None,
-        type=str,
-        help="[eval_batch] Folder containing VRPLIB files",
-    )
-    parser.add_argument(
-        "--instance_path",
-        default=None,
-        type=str,
-        help="[eval_single] Path to one VRPLIB file",
-    )
-    parser.add_argument(
-        "--max_time",
-        type=float,
-        default=10.0,
-        help="Max runtime per instance in seconds (float).",
-    )
-    parser.add_argument(
-        "--plot_coordinates", "--plot-coordinates",
-        dest='plot_coordinates',
-        action='store_true',
-        help="Plot instance coordinates for eval_single mode.",
-    )
-    parser.add_argument(
-        "--plot_demands", "--plot-demands",
-        dest='plot_demands',
-        action='store_true',
-        help="Plot instance demands for eval_single mode.",
-    )
-    parser.add_argument(
-        "--plot_diversity", "--plot-diversity",
-        dest='plot_diversity',
-        action='store_true',
-        help="Plot instance diversity for eval_single mode.",
-    )
-    parser.add_argument(
-        "--plot_result", "--plot-result",
-        dest='plot_result',
-        action='store_true',
-        help="Plot instance result for eval_single mode.",
-    )
-    parser.add_argument(
-        "--plot_solution", "--plot-solution",
-        dest='plot_solution',
-        action='store_true',
-        help="Plot instance solution for eval_single mode.",
-    )
-    #parser.add_argument(
-    #    "--capacity",
-    #    type=int,
-    #    default=[50, 50],
-    #    help="Capacity of the vehicles. Default=50",
-    #)
-    parser.add_argument(
-        "--v_per_depot",
-        type=int,
-        default=4,
-        help="Max number of vehicles per depot",
-    )
-    args = parser.parse_args()
 
-    if args.mode == "eval_single":
-        if not args.instance_path or not os.path.isfile(args.instance_path):
-            raise SystemExit("Provide a valid --instance_path to a VRPLIB file.")
-        inst = pyvrp.read(args.instance_path)
-        if args.plot_coordinates:
-            pyvrp.plotting.plot_coordinates(data=inst, title=f"{args.instance_path} instance")
-        if args.plot_demands:
-            pyvrp.plotting.plot_demands(data=inst, title=f"{args.instance_path} instance")
-        name = os.path.basename(args.instance_path)
-        summary, res = solve_instance(name, inst, args.max_time)
-        summary, res = solve_instance_with_model(
-                            name        = name, 
-                            instance    = inst,
-                            max_time    = args.max_time,
-                            v_per_depot = args.v_per_depot, 
-                            #capacity    = args.capacity
-                            )
- 
-        print(f"{summary['instance']}: cost={summary['cost']} time_s={summary['time_s']}")
-        print(summary["repr"])
-        if args.plot_diversity:
-            pyvrp.plotting.plot_diversity(res)
-        if args.plot_result:
-            pyvrp.plotting.plot_result(result=res, data=inst)
-        if args.plot_solution:
-            pyvrp.plotting.plot_solution(solution=res.best, data=inst)
-        return
+clients = [
+    m.add_client(
+        x=int(data['node_coord'][idx][0]),
+        y=int(data['node_coord'][idx][1]),
+        delivery=int(data['demand'][idx]),
+    )
+    for idx in range(num_depots, len(data['node_coord']))
+]
 
-    # batch eval
-    if not args.dataset_dir or not os.path.isdir(args.dataset_dir):
-        raise SystemExit("Provide a valid --dataset_dir pointing to a folder of VRPLIB files.")
+locations = depots + clients
 
-    items = load_vrplib_dir(args.dataset_dir)
-    results = []
-    for name, inst in items:
-        print(f"[INFO] Solving {name} (limit {args.max_time}s) ...")
-        summary = solve_instance(name, inst, args.max_time)
-        results.append(summary)
-        print(f"  -> cost={summary['cost']} time_s={summary['time_s']}")
+for frm_idx, frm in enumerate(locations):
+    for to_idx, to in enumerate(locations):
+        distance = abs(frm.x - to.x) + abs(frm.y - to.y)  # Manhattan
+        m.add_edge(frm, to, distance=distance)
 
-    print("\n=== Batch summary ===")
-    width = max(len(r["instance"]) for r in results)
-    print(f"{'instance'.ljust(width)}  {'cost':>12}  {'time_s':>8}")
-    for r in results:
-        cost_str = "None" if r["cost"] is None else f"{r['cost']:,.6f}"
-        print(f"{r['instance'].ljust(width)}  {cost_str:>12}  {r['time_s']:>8.3f}")
+result = m.solve(stop=MaxRuntime(args.max_time), display=True)
 
+print(result)
 
-if __name__ == "__main__":
-    main()
+if args.plot_solution:
+    plot_solution(result.best, m.data())
 
+_, ax = plt.subplots(figsize=(8, 8))
+plot_solution(result.best, m.data(), ax=ax)
+plt.show()
