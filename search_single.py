@@ -11,6 +11,7 @@ import search
 import queue as pyqueue
 #from plot.plot import plot_instance
 import os
+import csv
 
 def lns_single_seach_job(args):
     try:
@@ -32,6 +33,7 @@ def lns_single_seach_job(args):
             # Create a batch of copies of the same instances that can be repaired in parallel
             #note: lns_batch_size indicates multiple copies of the same vrp instance
             instance_copies = [deepcopy(instance) for _ in range(config.lns_batch_size)]
+            min_costs_trace = []
 
             iter = -1
             # Repeat until the time limit of one reheating iteration is reached
@@ -67,7 +69,6 @@ def lns_single_seach_job(args):
                             )
 
                 costs = [inst.get_costs_memory(config.round_distances) for inst in instance_copies]
-
                 # Calculate the T_max and T_factor values for simulated annealing in the first iteration
                 if iter == 0:
                     q75, q25 = np.percentile(costs, [75, 25])
@@ -75,6 +76,8 @@ def lns_single_seach_job(args):
                     T_factor = -math.log(T_max / T_min)
 
                 min_costs = min(costs)
+                min_costs_trace.append((id, min_costs))
+                #print(f"DEBUG: job {id} -> min_costs: {min_costs}")
 
                 # Update incumbent if a new best solution is found
                 if min_costs <= incumbent_cost:
@@ -90,6 +93,7 @@ def lns_single_seach_job(args):
                     instance.solution = instance_copies[np.argmin(costs)].solution
                     cur_cost = min_costs
 
+            print(f"min_costs_trace: \n{min_costs_trace}")
             queue_results.put([incumbent_solution, incumbent_cost])
 
     except Exception as e:
@@ -114,6 +118,11 @@ def lns_single_search_mp(instance_path, timelimit, config, model_path, pkl_insta
     pool.map_async(lns_single_seach_job,
                    [(i, config, instance_path, model_path, queue_jobs, queue_results, pkl_instance_id) for i in
                     range(config.lns_nb_cpus)])
+
+    objective_trace = []
+    objective_trace.append((0.0, float(incumbent_costs)))
+    print(f"DEBUG: incumbent_costs: {incumbent_costs}")
+
     # Distribute starting solution to search processes
     for i in range(config.lns_nb_cpus):
         queue_jobs.put([instance.solution, incumbent_costs])
@@ -126,8 +135,10 @@ def lns_single_search_mp(instance_path, timelimit, config, model_path, pkl_insta
         # Receive the incumbent solution from a finished search process (reheating iteration finished)
         #result = queue_results.get()
         if result != 0:
-            if result[1] < incumbent_costs:
-                incumbent_costs = result[1]
+            cost = result[1]
+            objective_trace.append((time.time() - start_time, float(cost)))
+            if cost < incumbent_costs:
+                incumbent_costs = cost
                 instance.solution = result[0]
                 print('incumbent_costs', incumbent_costs)
         # Distribute incumbent solution to search processes
@@ -136,6 +147,18 @@ def lns_single_search_mp(instance_path, timelimit, config, model_path, pkl_insta
     pool.terminate()
     duration = time.time() - start_time
     instance.verify_solution(config)
+
+    print(f"objective_trace length = {len(objective_trace)}; last = {objective_trace[-1] if objective_trace else None}") 
+
+    trace_path = os.path.join(dir_path, f"objective_trace_{os.path.basename(instance_path).replace(os.sep, '_')}.csv")
+    with open(trace_path, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["time_sec", "incumbent_cost"])
+        w.writerows(objective_trace)
+
+    print(f"Wrote objective trace to {trace_path}")
+
+
     # plot final instance 
     plot_path = f"{dir_path}/final_snapshot.png"
     #plot_instance(instance, plot_path)

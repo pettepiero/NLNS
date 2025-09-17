@@ -244,7 +244,7 @@ def read_instance(path, pkl_instance_idx=0):
     else:
         raise Exception("Unknown instance file type.")
 
-def read_instance_mdvrp(path):
+def read_instance_mdvrp(path) -> MDVRPInstance:
     file = open(path, "r")
     lines = [ll.strip() for ll in file]
     i = 0
