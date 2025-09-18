@@ -4,18 +4,23 @@ import os
 import time
 import torch
 import search_single
-from vrp.data_utils import read_instances_pkl, read_instance
+from vrp.data_utils import read_instances_pkl, read_instance, mdvrp_to_plot_solution
 import glob
 import search_batch
 from actor import VrpActorModel
 from dummy_model import dummy_model
 from vrp.mdvrp_problem import MDVRPInstance
+from tqdm import trange
+from pyvrp.plotting import plot_solution
+from pyvrp import read as pyvrp_read
 
 class LnsOperatorPair:
     def __init__(self, model, destroy_procedure, p_destruction):
         self.model = model
         self.destroy_procedure = destroy_procedure
         self.p_destruction = p_destruction
+    def __str__(self):
+        return f"Destroy_procedure: {self.destroy_procedure} | P_destruction: {self.p_destruction}"
 
 
 def destroy_instances(rng, instances, destroy_procedure=None, destruction_p=None):
@@ -95,7 +100,7 @@ def evaluate_single_search(config, model_path, instance_path):
     for i, instance_path in enumerate(instance_files_path):
         if instance_path.endswith(".pkl") or instance_path.endswith(".vrp") or instance_path.endswith(".sd") or instance_path.endswith(".mdvrp"):
             for jj in range(config.nb_runs):
-                cost, duration = search_single.lns_single_search_mp(instance_path, config.lns_timelimit, config,
+                cost, duration, final_instance = search_single.lns_single_search_mp(instance_path, config.lns_timelimit, config,
                                                                     model_path, i)
                 instance_names.append(instance_path)
                 costs.append(cost)
@@ -109,6 +114,21 @@ def evaluate_single_search(config, model_path, instance_path):
     logging.info(
         f"NLNS single search evaluation results: Total Nb. Runs: {len(costs)}, "
         f"Mean Costs: {np.mean(costs):.3f} Mean Runtime (s): {np.mean(durations):.1f}")
+
+    if config.plot_solution:
+        sol = mdvrp_to_plot_solution(final_instance)
+        data = pyvrp_read(instance_path) 
+        plot_solution(sol, data, plot_clients=True)
+
+    #print on terminal
+    tours = final_instance.solution
+    tours = [t for t in tours if len(t) > 1]
+    logging.info(f"Solution results\n==============")
+    logging.info(f"\t# routes: {len(tours)}")
+    logging.info(f"\t# clients: {final_instance.nb_customers}")
+    logging.info(f"\t# n_depots: {final_instance.n_depots}")
+    logging.info(f"\t# depot indices: {final_instance.depot_indices}")
+    logging.info(f"\t# costs: {final_instance.get_costs(True)}")
 
 def evaluate_multi_depot_search(config, instance_path):
     assert instance_path is not None, "No instance path given"

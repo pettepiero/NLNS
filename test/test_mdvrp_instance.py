@@ -295,27 +295,40 @@ class MDVRP_instance_test(unittest.TestCase):
                     self.assertEqual(v[1], mdvrp.locations[customer][1]) #customer coordinates
                     self.assertEqual(v[2], demand) #sum of fulfilled demands
                     self.assertEqual(v[3], 1) #encoding
+
+        # test mdvrp.open_nn_input_idx
+        self.assertEqual(nn_input.shape[0], input_dim)
+        
+        indices_to_check = []
+
+        for i, el in enumerate(mdvrp.nn_input_idx_to_tour):
+            if i < mdvrp.n_depots:
+                continue
+             
+            if len(el[0]) == 1:
+                idx = el[0][0][-1]
+                indices_to_check.append(idx)
+            else:
+                #find end
+                if el[0][0][0] in mdvrp.depot_indices:
+                    idx = el[0][-1][-1]
+                    assert idx not in mdvrp.depot_indices, 'Error. A route with starting and ending depot and len > 1 in nn_input_idx_to_tour'
+                    indices_to_check.append(idx)
+                elif el[0][-1][0] in mdvrp.depot_indices: 
+                    idx = el[0][0][-1]
+                    assert idx not in mdvrp.depot_indices, 'Error. A route with starting and ending depot and len > 1 in nn_input_idx_to_tour'
+                    indices_to_check.append(idx)
+                else:
+                    raise ValueError
+
+        #reorded list
+        #indices_to_check = indices_to_check.sort()
+        indices_to_check.sort()
+        self.assertEqual(indices_to_check, mdvrp.open_nn_input_idx)
+        
+
                     
                 
-#    def test__get_network_input_update_for_tour(self):
-#        mdvrp = self.mdvrp_instance
-#        mdvrp.create_initial_solution()
-#        rng = np.random.default_rng(12345)
-#        mdvrp.destroy_point_based(p=0.3, rng=rng)
-#        incomplete_tours = mdvrp.incomplete_tours
-#        print(f"DEBUG: incomplete_tours: \n")
-#        for tour in incomplete_tours:
-#            print(tour)
-#
-#        tour0 = incomplete_tours[0] # should be [[8, 1, None]]
-#        tour1 = incomplete_tours[1] # should be [[12, 9, None]]
-#        tour2 = incomplete_tours[2] # should be [[4, 1, None], [15, 1, None], [0, 0, 0]]
-#        
-#        update0 = mdvrp._get_network_input_update_for_tour(tour=tour0, new_demand=3)
-#        update1 = mdvrp._get_network_input_update_for_tour(tour=tour1, new_demand=3)
-#        update2 = mdvrp._get_network_input_update_for_tour(tour=tour2, new_demand=3)
-
-
     def test_do_action(self):
         mdvrp = self.mdvrp_instance
         mdvrp.create_initial_solution()
@@ -500,13 +513,13 @@ class MDVRP_instance_test(unittest.TestCase):
 
         self.assertEqual(result, known_result)
 
-
     def test_get_mask(self):
         rng = np.random.default_rng(1234)
-        batch_size = 12 
+        batch_size = 100 
 
         config = argparse.Namespace(
-                instance_blueprint='MD_7', 
+                #instance_blueprint='MD_7', 
+                instance_blueprint='MD_6', 
                 problem_type='mdvrp',
                 seed=0,
                 capacity=6,
@@ -524,26 +537,33 @@ class MDVRP_instance_test(unittest.TestCase):
         input_size      = max([ins.get_max_nb_input_points() for ins in training_set])
         static_input    = np.zeros((batch_size, input_size, 2))
         dynamic_input   = np.zeros((batch_size, input_size, 2), dtype='int')
-        origin_idx      = np.zeros((batch_size), dtype=int)
+        nn_origin_indices  = np.zeros((batch_size), dtype=int)
         for i, instance in enumerate(training_set):
-            static_nn_input, dynamic_nn_input = instance.get_network_input(input_size)
-            static_input[i] = static_nn_input
-            dynamic_input[i] = dynamic_nn_input
-            if (origin_idx[i] == 0 or int(origin_idx[i]) in instance.depot_indices): #and not instance_repaired[i]:
+            static_nn_input, dynamic_nn_input = instance.get_network_input(input_size) #this updates open_nn_input_idx
+            static_input[i]     = static_nn_input
+            dynamic_input[i]    = dynamic_nn_input
+            if (nn_origin_indices[i] == 0 or int(nn_origin_indices[i]) in instance.depot_indices): #and not instance_repaired[i]:
                 if rng is None:
-                    origin_idx[i] = np.random.choice(instance.open_nn_input_idx, 1).item()
+                    nn_origin_indices[i] = np.random.choice(instance.open_nn_input_idx, 1).item()
                 else:
-                    origin_idx[i] = rng.choice(instance.open_nn_input_idx, 1).item()
+                    nn_origin_indices[i] = rng.choice(instance.open_nn_input_idx, 1).item()
 
         static_input    = torch.from_numpy(static_input).to(config.device).float()
         dynamic_input   = torch.from_numpy(dynamic_input).to(config.device).long()
-        mask            = get_mask(origin_idx, dynamic_input, training_set, config, config.capacity).to(config.device)
-
+        mask            = get_mask(nn_origin_indices, dynamic_input, training_set, config, config.capacity).to(config.device)
         # assertions
         for i, instance in enumerate(training_set):
-            origin = origin_idx[i]
-            self.assertEqual(mask[i, origin], False)
+            origin = nn_origin_indices[i]
+            self.assertEqual(mask[i, origin], False) # assert origin cannot be sampled again
             origin_tour, origin_pos = instance.nn_input_idx_to_tour[origin]
+            same_tour_idxs = [
+                j for j, entry in enumerate(instance.nn_input_idx_to_tour)
+                if entry is not None and entry[0] is origin_tour
+            ]
+            
+            assert len(same_tour_idxs) <= 2
+            for j in same_tour_idxs:
+                self.assertFalse(mask[i, j], f"Index {j} points to same tour as origin {origin} but is not masked")
 
             #assert on tour and pos
             self.assertEqual(origin_tour[origin_pos][2], origin)
@@ -552,13 +572,12 @@ class MDVRP_instance_test(unittest.TestCase):
             if home_depot is not None:
                 depot_indices = deepcopy(instance.depot_indices)
                 depot_indices = [idx for idx in depot_indices if idx != home_depot]
-                known_sol = torch.Tensor([False]*len(depot_indices))
+                known_sol = torch.zeros(len(depot_indices), dtype=torch.bool, device=mask.device)
                 # allow connecting only to home_depot among depot nodes
-                self.assertEqual(np.array_equal(mask[i, depot_indices], known_sol), True)
+                self.assertTrue(torch.equal(mask[i, depot_indices], known_sol))
                 self.assertEqual(mask[i, home_depot], True)
             else:
                 self.assertEqual(np.array_equal(mask[i, instance.depot_indices], np.array([True]*len(instance.depot_indices))), True)
-
 
             #capacity masking assertions
             customers_of_tour = [cust[0] for cust in origin_tour]

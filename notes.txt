@@ -1,8 +1,15 @@
 batch search
 python3 main.py --mode eval_batch --model_path /home/pettena/NLNS/runs/run_29.8.2025_87528/models/model_incumbent_C_MD_1_P_0.1_87528.pt --lns_nb_cpus 10 --instance_path data/mdvrp/mdvrp20_validation_seed1234.pkl --lns_batch_size 50 --lns_timelimit 60 --lns_adaptive_search --device cpu --problem_type mdvrp
 
-single instance search
-python3 main.py --mode eval_single --model_path /home/pettena/NLNS/runs/run_29.8.2025_87528/models/model_incumbent_C_MD_1_P_0.1_87528.pt --instance_path data/mdvrp_seed_0_id_0.mdvrp --lns_nb_cpus 10 --device cpu --problem mdvrp --lns_timelimit 30
+single instance search (NLNS)
+    MD_5
+    python main.py --mode eval_single --model_path runs/run_13.9.2025_28158/models/model_incumbent_C_MD_5_P_0.1_28158.pt --instance_path ./datasets/vrplib/2025-09-13_15-54-46_val/inst_00500.mdvrp --problem_type mdvrp --lns_timelimit 30
+
+    MD_4
+    python main.py --mode eval_single --model_path runs/run_17.9.2025_16354/models/model_incumbent_C_MD_4_P_0.1_16354.pt --instance_path ./datasets/vrplib/2025-09-17_17-30-29_val/inst_00500.mdvrp --problem_type mdvrp --lns_timelimit 30
+
+single instance search (PyVRP)
+python pyvrp_model.py --instance_path ./datasets/vrplib/2025-09-13_15-54-46_val/inst_00500_copy.mdvrp --max_time 40
 
 train
 python3 main.py --mode train --problem_type mdvrp --instance_blueprint MD_1 --lns_destruction P --lns_destruction_p 0.1 --nb_batches_training_set 500 --lns_timelimit 300 --lns_batch_size 50 --device cpu --nb_train_batches 2500 --lns_nb_cpus 10
@@ -10,3 +17,19 @@ python3 main.py --mode train --problem_type mdvrp --instance_blueprint MD_1 --ln
 generate_data
 python altr_generate_data.py --problem mdvrp --name validation_prova --dataset_size 1000 --depot_size 3
 
+
+# train new
+python main.py --problem mdvrp --instance_blueprint MD_2 --nb_batches_training_set 1000 --nb_train_batches 10000 --save_dataset True --dataset_format vrplib --lns_batch_size 100
+
+#datasets of ^ training (big)
+
+./datasets/vrplib/2025-09-13_15-54-46_train/
+./datasets/vrplib/2025-09-13_15-54-46_val/
+
+# datasets (smaller)
+./datasets/vrplib/2025-09-10_11-28-56_train/
+./datasets/vrplib/2025-09-10_11-28-56_val/
+
+# datasets (even smaller)
+./datasets/vrplib/2025-09-10_12-12-51_train/
+./datasets/vrplib/2025-09-10_12-12-51_val/

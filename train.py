@@ -10,24 +10,118 @@ import datetime
 from search_batch import lns_batch_search
 import repair
 import main
-from vrp.data_utils import create_dataset
+from vrp.data_utils import create_dataset, save_dataset_pkl, read_instances_pkl, save_dataset_vrplib, read_instance_mdvrp
 from search import LnsOperatorPair
-from tqdm import trange
+from tqdm import tqdm, trange
 from pathlib import Path
 from plot.plot import plot_instance
+import pickle
+
+
+def save_model_info(config):
+    filepath = "./list_trained_models.csv"
+    header = [
+     "Run_ID",
+     "Instance_blueprint",
+     "nb_train_batches",
+     "nb_batches_training_set",
+     "test_size",
+     "actor_lr",
+     "batch_size",
+    ] 
+    run_id = os.path.basename(config.output_path)
+    row = [
+        run_id,
+        config.instance_blueprint,
+        config.nb_train_batches,
+        config.nb_batches_training_set,
+        config.test_size,
+        config.actor_lr,
+        config.batch_size,
+    ]
+    file_exists = os.path.isfile(filepath)
+
+    with open(filepath, mode="a", newline="") as f:
+       writer = csv.writer(f)
+       if not file_exists:
+           writer.writerow(header)
+       writer.writerow(row)
+
 
 def train_nlns(actor, critic, run_id, config):
+    save_model_info(config)
     rng = np.random.default_rng(config.seed)
     batch_size = config.batch_size
 
-    logging.info("Generating training data...")
-    # Create training and validation set. The initial solutions are created greedily
-    training_set = create_dataset(size=batch_size * config.nb_batches_training_set, config=config,
-                                  create_solution=True, use_cost_memory=False, seed=config.seed)
-    logging.info("Generating validation data...")
-    validation_instances = create_dataset(size=config.valid_size, config=config, seed=config.validation_seed,
-                                          create_solution=True)
+    if not config.load_dataset:
+        logging.info("Generating training data...")
+        # Create training and validation set. The initial solutions are created greedily
+        training_set = create_dataset(size=batch_size * config.nb_batches_training_set, config=config, create_solution=True, use_cost_memory=False, seed=config.seed)
+        logging.info("Generating validation data...")
+        validation_instances = create_dataset(size=config.valid_size, config=config, seed=config.validation_seed, create_solution=True)
 
+        if config.save_dataset:
+            now_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            if config.dataset_format == 'pkl':
+                save_dataset_pkl(training_set, f'./datasets/pkl/{now_str}_train.pkl')
+                save_dataset_pkl(validation_instances, f'./datasets/pkl/{now_str}_val.pkl')
+            elif config.dataset_format == 'vrplib':
+                save_dataset_vrplib(instances=training_set, folder=f'./datasets/vrplib/{now_str}_train/', start_index=1) 
+                save_dataset_vrplib(instances=validation_instances, folder=f'./datasets/vrplib/{now_str}_val/', start_index=1) 
+            else:
+                raise ValueError(f"Unknown dataset_format option: {config.dataset_format}")
+#################################################################
+        # reading dataset from dir or single pkl file
+    else:
+        assert config.train_filepath is not None
+        assert config.val_filepath is not None
+        assert os.path.exists(config.train_filepath)
+        assert os.path.exists(config.val_filepath)
+       
+        # if from directory containing multiple files         
+        if os.path.isdir(config.train_filepath):
+            # check that there are files that end with 'mdvrp' or 'vrp'
+            train_instances = [ins for ins in os.listdir(config.train_filepath) if os.path.isfile(os.path.join(config.train_filepath, ins))]
+            train_instances = [ins for ins in train_instances if os.path.splitext(ins)[1] in ['.mdvrp', 'vrp']]
+            print(f"Found {len(train_instances)} train instances")
+            assert len(train_instances) == config.batch_size * config.nb_batches_training_set
+            val_instances = [ins for ins in os.listdir(config.val_filepath) if os.path.isfile(os.path.join(config.val_filepath, ins))]
+            validation_instances = [ins for ins in val_instances if os.path.splitext(ins)[1] in ['.mdvrp', 'vrp']]
+            print(f"Found {len(val_instances)} val instances")
+            #convert to mdvrpinstance list
+            print("Converting instances from files to VRPInstance/MDVRPInstance list...")
+            training_set = []
+            validation_instances = []
+            if config.problem_type == 'mdvrp':
+                for el in tqdm(train_instances):
+                    instance = read_instance_mdvrp(os.path.join(config.train_filepath, el))
+                    instance.create_initial_solution()
+                    training_set.append(instance)
+                for el in tqdm(val_instances):
+                    instance = read_instance_mdvrp(os.path.join(config.val_filepath, el))
+                    instance.create_initial_solution()
+                    validation_instances.append(instance)
+            elif config.problem_type == 'vrp':
+                for el in tqdm(train_instances):
+                    instance = read_instance_vrp(os.path.join(config.train_filepath, el))
+                    instance.create_initial_solution()
+                    training_set.append(instance)
+                for el in tqdm(val_instances):
+                    instance = read_instance_vrp(os.path.join(config.val_filepath, el))
+                    instance.create_initial_solution()
+                    validation_instances.append(instance)
+            else:
+                raise ValueError('Problem in config.problem_type: {config.problem_type}')
+            print("...done")
+            assert len(val_instances) % config.lns_batch_size == 0
+        
+        # if from single pkl file
+        elif os.path.splitext(config.train_filepath)[1] == '.pkl' and os.path.splitext(config.val_filepath)[1] == '.pkl':
+            with open(config.train_filepath, "rb") as f:
+                training_set = pickle.load(f)
+            with open(config.val_filepath, "rb") as f:
+                validation_instances = pickle.load(f)
+#############################################################################################àààà
     actor_optim = optim.Adam(actor.parameters(), lr=config.actor_lr)
     actor.train()
     critic_optim = optim.Adam(critic.parameters(), lr=config.critic_lr)
@@ -37,10 +131,8 @@ def train_nlns(actor, critic, run_id, config):
     # save csv files with losses and rewards
     metrics_dir = Path(getattr(config, "metrics_dir", Path(config.output_path) / "metrics"))
     metrics_dir.mkdir(parents=True, exist_ok=True)  
-
     # Allow user-defined file paths on config; otherwise default names under metrics_dir
     summary_path = Path(getattr(config, "summary_path", metrics_dir / f"summary_every_250_{run_id}.csv"))
-
     if not summary_path.exists():
         with summary_path.open("w", newline="") as f:
             w = csv.writer(f)
@@ -50,6 +142,7 @@ def train_nlns(actor, critic, run_id, config):
     start_time = datetime.datetime.now()
 
     logging.info("Starting training...")
+    
     for batch_idx in trange(1, config.nb_train_batches + 1):
     #for batch_idx in range(1, config.nb_train_batches + 1):
         # Get a batch of training instances from the training set. Training instances are generated in advance, because
@@ -57,6 +150,7 @@ def train_nlns(actor, critic, run_id, config):
         training_set_batch_idx = batch_idx % config.nb_batches_training_set
         tr_instances = [deepcopy(instance) for instance in
                         training_set[training_set_batch_idx * batch_size: (training_set_batch_idx + 1) * batch_size]]
+
         # Destroy and repair the set of instances
         destroy_instances(rng, tr_instances, config.lns_destruction, config.lns_destruction_p)
         costs_destroyed = [instance.get_costs_incomplete() for instance in tr_instances]

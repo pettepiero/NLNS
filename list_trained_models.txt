@@ -1,7 +1,0 @@
-/home/pettepiero/tirocinio/NLNS/runs/run_29.8.2025_87528
-/home/pettepiero/tirocinio/NLNS/runs/run_29.8.2025_90788
-/home/pettepiero/tirocinio/NLNS/runs/run_1.9.2025_64323 #good
-/home/pettepiero/tirocinio/NLNS/runs/run_1.9.2025_82542 #bad
-/home/pettepiero/tirocinio/NLNS/runs/run_1.9.2025_64356 #medium
-/home/pettepiero/tirocinio/NLNS/runs/run_2.9.2025_60171 #good
-/home/pettepiero/tirocinio/NLNS/runs/run_3.9.2025_71942 #very bad, on local machine

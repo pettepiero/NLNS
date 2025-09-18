@@ -43,6 +43,14 @@ def get_config():
     parser.add_argument('--lns_adaptive_search', default=False, action='store_true')
     parser.add_argument('--nb_runs', default=1, type=int)
 
+    parser.add_argument('--data_notation', default='mine', type=str)
+    parser.add_argument('--save_dataset', default=False, type=bool)
+    parser.add_argument('--load_dataset', default=False, type=bool)
+    parser.add_argument('--train_filepath', default=None, type=str)
+    parser.add_argument('--val_filepath', default=None, type=str)
+    parser.add_argument('--dataset_format', default=None, type=str, choices=['vrplib', 'pkl'])
+    parser.add_argument('--plot_solution', '--plot-solution', default=False, action='store_true')
+
     config = parser.parse_args()
 
     config_d = vars(config)
