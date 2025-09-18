@@ -126,7 +126,7 @@ def evaluate_single_search(config, model_path, instance_path):
     logging.info(f"\t# clients: {final_instance.nb_customers}")
     logging.info(f"\t# n_depots: {final_instance.n_depots}")
     logging.info(f"\t# depot indices: {final_instance.depot_indices}")
-    logging.info(f"\t# distance: {final_instance.get_costs}")
+    logging.info(f"\t# distance: {final_instance.get_costs(True)}")
 
 def evaluate_multi_depot_search(config, instance_path):
     assert instance_path is not None, "No instance path given"

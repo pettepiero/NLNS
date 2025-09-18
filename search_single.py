@@ -64,6 +64,7 @@ def lns_single_seach_job(args):
                             instances   = instance_copies[i * config.lns_batch_size: (i + 1) * config.lns_batch_size],
                             actor       = actor, 
                             config      = config,
+                            rng=rng,
                             )
 
                 costs = [inst.get_costs_memory(config.round_distances) for inst in instance_copies]
