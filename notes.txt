@@ -9,7 +9,7 @@ single instance search (NLNS)
     python main.py --mode eval_single --model_path runs/run_17.9.2025_16354/models/model_incumbent_C_MD_4_P_0.1_16354.pt --instance_path ./datasets/vrplib/2025-09-17_17-30-29_val/inst_00500.mdvrp --problem_type mdvrp --lns_timelimit 30
 
 single instance search (PyVRP)
-python pyvrp_model.py --mode eval_single --instance_path ./datasets/vrplib/2025-09-13_15-54-46_val/inst_00400.mdvrp --max_time 40 --plot_solution
+python pyvrp_model.py --instance_path ./datasets/vrplib/2025-09-13_15-54-46_val/inst_00500_copy.mdvrp --max_time 40
 
 train
 python3 main.py --mode train --problem_type mdvrp --instance_blueprint MD_1 --lns_destruction P --lns_destruction_p 0.1 --nb_batches_training_set 500 --lns_timelimit 300 --lns_batch_size 50 --device cpu --nb_train_batches 2500 --lns_nb_cpus 10

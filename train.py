@@ -122,11 +122,6 @@ def train_nlns(actor, critic, run_id, config):
             with open(config.val_filepath, "rb") as f:
                 validation_instances = pickle.load(f)
 #############################################################################################àààà
-
-    print(f"DEBUG: len(validation_instances): {len(validation_instances)}")
-    print(f"DEBUG: len(training_set): {len(training_set)}")
-    print(f"training_set[0] = {training_set[0]}")
-
     actor_optim = optim.Adam(actor.parameters(), lr=config.actor_lr)
     actor.train()
     critic_optim = optim.Adam(critic.parameters(), lr=config.critic_lr)

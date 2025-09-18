@@ -52,7 +52,6 @@ def load_operator_pairs(path, config):
         actor.eval()
 
         operator_pair = LnsOperatorPair(actor, model_data['destroy_operation'], model_data['p_destruction'])
-        print(f"DEBUG: operator_pair: {operator_pair}")
         lns_operator_pairs.append(operator_pair)
     return lns_operator_pairs
 
