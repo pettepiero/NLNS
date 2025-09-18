@@ -105,5 +105,9 @@ class VrpActorModel(nn.Module):
         origin_hidden = self.origin_embed.forward(
             torch.cat((origin_static_input.unsqueeze(1), origin_dynamic_input_float.unsqueeze(1)), dim=2))
 
-        probs = self.pointer.forward(all_hidden.permute(0, 2, 1), origin_hidden.permute(0, 2, 1))
+        logits = self.pointer.forward(all_hidden.permute(0, 2, 1), origin_hidden.permute(0, 2, 1))
+
+        #masked_logits = logits.masked_fill(~mask, -1e9)
+        masked_logits = torch.where(mask, logits, torch.full_like(logits, float('-inf')))
+        probs = F.softmax(masked_logits, dim=1)
         return probs

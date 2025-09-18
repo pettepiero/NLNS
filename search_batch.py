@@ -11,6 +11,7 @@ EMA_ALPHA = 0.2
 
 def lns_batch_search(instances, max_iterations, timelimit, operator_pairs, config, rng):
     if len(instances) % config.lns_batch_size != 0:
+        print(f"DEBUG: len(instances): {len(instances)} - config.lns_batch_size: {config.lns_batch_size}")
         raise Exception("Instance set size must be multiple of lns_batch_size for batch search.")
 
     costs = [instance.get_costs_memory() for instance in instances]  # Costs for each instance
@@ -77,9 +78,14 @@ def _lns_batch_search_job(args):
     rng = np.random.default_rng()
     (i, test_size, config, model_path) = args
     if config.instance_path is None:
+        print(f"Creating {test_size} instances for batch search...")
         instances = create_dataset(size=test_size, config=config, seed=config.validation_seed + 1 + i)
+        print(f"...done")
     else:
+        print(f"Reading instances {config.instance_path} for batch search...")
         instances = read_instances_pkl(config.instance_path, test_size * i, test_size)
+        print(f"...done")
+
     lns_operations = search.load_operator_pairs(model_path, config)
 
     for instance in instances:

@@ -5,7 +5,7 @@ import torch
 class MDVRPInstance():
     """ 
     Generalization of VRPInstance to MD case.
-
+    
     Attributes 
     ----------
     nb_customers: int
@@ -33,7 +33,7 @@ class MDVRPInstance():
     incomplete_tours: list
         List of incomplete tours of self.solution
     """
-
+    
     def __init__(self, depot_indices, locations, original_locations, demand, capacity, use_cost_memory=True):
         self.nb_customers = len(locations)-len(depot_indices)
         assert self.nb_customers > 0, f"Error in nb_customers"
@@ -47,7 +47,7 @@ class MDVRPInstance():
         self.demand = demand  # demand for each customer (integer). Values are divided by capacity right before being
         # fed to the network
         self.capacity = capacity  # capacity of the vehicle
-
+    
         self.solution = None  # List of tours. Each tour is a list of location elements. Each location element is a
         # list with three values [i_l, d, i_n], with i_l being the index of the location,
         # d being the fulfilled demand of customer i_l by that tour, and
@@ -61,14 +61,20 @@ class MDVRPInstance():
             self.costs_memory = np.full((self.nb_customers + self.n_depots, self.nb_customers + self.n_depots), np.nan, dtype="float")
         else:
             self.costs_memory = None
-
+    
     #def get_n_closest_locations_to(self, origin_location_id, mask, n):
         #"""Return the idx of the n closest locations sorted by distance."""
         #distances = np.array([np.inf] * len(mask))
         #distances[mask] = ((self.locations[mask] * self.locations[origin_location_id]) ** 2).sum(1)
         #order = np.argsort(distances)
         #return order[:n]
-
+    def __str__(self):
+        return f" \
+            'nb_customers': {self.nb_customers},\n \
+            'depot_indices': {self.depot_indices},\n \
+            'solution': {self.solution}, \n \
+            'cost': {self.get_costs(True)}"
+    
     def get_n_closest_locations_to(self, origin_location_id, mask, n):
         """Return the idx of the n closest locations (Euclidean) sorted by distance."""
         locs = self.locations
@@ -86,10 +92,9 @@ class MDVRPInstance():
         take = min(n, idxs.size)
         # drop 0 if inserted
         nearest_masked_order = np.argsort(dists)[:take]   # positions within idxs
-        result = idxs[nearest_masked_order]                 # original indices into self.locations 
-        assert 0 not in result, f"Found 0 in nearest_masked_order: {nearest_masked_order}"
-        return result
-
+        return idxs[nearest_masked_order]                 # original indices into self.locations
+    
+    
     def get_nearest_depot(self, loc):
         x,y = self.locations[loc]
         min_dist = np.inf 
@@ -100,12 +105,12 @@ class MDVRPInstance():
             if dist < min_dist:
                 min_dist = dist
                 closest_depot = d
-
+    
         return closest_depot 
-
+    
     def create_initial_solution(self):
         """Create an initial solution for this instance using a greedy heuristic."""
-
+    
         #1 create clusters for each depot
         depot_to_customer = {} # dict mapping depot id to list of customers in cluster
         for depot in self.depot_indices:
@@ -114,23 +119,23 @@ class MDVRPInstance():
         for idx in self.customer_indices:
             nearest_depot = self.get_nearest_depot(idx)
             depot_to_customer[nearest_depot].append(idx)
-
+    
         self.solution = []
         for input_idx, depot in enumerate(self.depot_indices):
             self.solution.append([[depot, 0, input_idx]]) # for depot only
-
+    
         # 2 do normal NLNS VRP greedy solution inside each cluster
         # use mask to only see some customers
         for input_idx, depot in enumerate(self.depot_indices):
             available_customers = depot_to_customer[depot]
-
+    
             self.solution.append([[depot, 0, input_idx]]) # to start route
             cur_load = self.capacity
             mask = np.array([False] * (self.nb_customers + self.n_depots+1))
             # enable only current depot and current available customers
             mask[depot] = False 
             mask[available_customers] = True
-
+    
             while mask.any():
                 closest_customer_idx = self.get_n_closest_locations_to(self.solution[-1][-1][0], mask, 1)[0]
                 if self.demand[closest_customer_idx] <= cur_load:
@@ -142,8 +147,8 @@ class MDVRPInstance():
                     self.solution.append([[depot, 0, input_idx]])
                     cur_load = self.capacity
             self.solution[-1].append([depot, 0, input_idx])
-
-    def get_costs_memory(self):
+    
+    def get_costs_memory(self, round):
         """Return the cost of the current complete solution. Uses a memory to improve performance."""
         c = 0
         for t in self.solution:
@@ -315,8 +320,9 @@ class MDVRPInstance():
     def get_max_nb_input_points(self):
         """For the current instance, returns the number of input vectors required to describe the
         incomplete solution. """
-        if self.incomplete_tours is None:
-            self.incomplete_tours = self._get_incomplete_tours()
+        #if self.incomplete_tours is None:
+        #    self.incomplete_tours = self._get_incomplete_tours()
+        self.incomplete_tours = self._get_incomplete_tours()
 
         incomplete_tours = self.incomplete_tours
         nb = self.n_depots  # input point for each depot
@@ -440,6 +446,8 @@ class MDVRPInstance():
          presented by the input with id id_to."""
 
         tour_from = self.nn_input_idx_to_tour[id_from][0]  # Tour that should be connected
+        if self.nn_input_idx_to_tour[id_to] is None:
+            print(id_to)
         tour_to = self.nn_input_idx_to_tour[id_to][0]  # to this tour.
         pos_from = self.nn_input_idx_to_tour[id_from][1]  # Position of the location that should be connected in tour_from
         pos_to = self.nn_input_idx_to_tour[id_to][1]  # Position of the location that should be connected in tour_to
@@ -469,6 +477,10 @@ class MDVRPInstance():
         # Case 1
         if len(tour_from) > 1 and len(tour_to) > 1:
             combined_demand = sum(l[1] for l in tour_from) + sum(l[1] for l in tour_to)
+            if combined_demand > self.capacity:
+                print(f"DEBUG: combined_demand: {combined_demand} > self.capacity: {self.capacity}")
+                print(f"DEBUG: failed connecting tour_from: {tour_from} to tour_to: {tour_to}")
+                print("\n")
             assert combined_demand <= self.capacity  # This is ensured by the masking schema
 
             # The two incomplete tours are combined to one (in)complete tour. All network inputs associated with the
@@ -612,11 +624,11 @@ class MDVRPInstance():
 
 
 def get_mask(origin_nn_input_idx, dynamic_input, instances, config, capacity):
-    """ 
+    """
     Returns a mask for the current nn_input
         Parameters:
             origin_nn_input_idx: list or th.Tensor
-                For each instance in the batch, the NN input index of the chosen origin end 
+                For each instance in the batch, the NN input index of the chosen origin end
             dynamic_input: th.Tensor (shape (B, N, 2))
                 Tensor containing demand and state for each candidate end
             instances: list
@@ -624,7 +636,7 @@ def get_mask(origin_nn_input_idx, dynamic_input, instances, config, capacity):
             config: argparse.Namespace
                 Namespace of CLI config options
             capacity: int
-                Capacity of the vehicles 
+                Capacity of the vehicles
     """
     device = dynamic_input.device
     batch_size, N, _ = dynamic_input.shape
@@ -645,7 +657,7 @@ def get_mask(origin_nn_input_idx, dynamic_input, instances, config, capacity):
 
         idx_from = origin_nn_input_idx[i]   # for the i-th instance in the batch, this is the index of the tour end
                                             # we want to connect from
-
+        
         # Find the start of the tour in the nn input
         origin_tour, origin_pos = inst.nn_input_idx_to_tour[idx_from]
 
@@ -685,7 +697,7 @@ def get_mask(origin_nn_input_idx, dynamic_input, instances, config, capacity):
 
     # capacity constraints
     origin_tour_demands = dynamic_input[torch.arange(batch_size), origin_nn_input_idx, 0]
-    combined_demand = origin_tour_demands.unsqueeze(1).expand(batch_size, dynamic_input.shape[1]) + dynamic_input[:, :, 0]
+    combined_demand     = origin_tour_demands.unsqueeze(1).expand(batch_size, dynamic_input.shape[1]) + dynamic_input[:, :, 0]
 
     if config.split_delivery:
         raise NotImplementedError
@@ -705,6 +717,22 @@ def get_mask(origin_nn_input_idx, dynamic_input, instances, config, capacity):
         #mask[combined_demand > capacity] = 0
         mask &= ~(combined_demand > capacity)
 
+    #guarantee at least one valid action per row
+    for i in range(batch_size):
+        if not mask[i].any():
+            inst = instances[i]
+            # Recover the origin tour to know the "home" depot (if any)
+            origin_idx_i = int(origin_nn_input_idx[i])
+            origin_tour, _ = inst.nn_input_idx_to_tour[origin_idx_i]
+            home_depot = get_depot(origin_tour, inst.depot_indices)
+
+            # Reset depot choices according to your policy
+            if home_depot is not None:
+                mask[i, inst.depot_indices] = False
+                mask[i, home_depot] = True
+            else:
+                # No depot yet in the origin tour: allow all depots
+                mask[i, inst.depot_indices] = True
     return mask
 
 def get_depot(tour: list, depot_indices: list):
