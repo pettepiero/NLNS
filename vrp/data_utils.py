@@ -14,7 +14,7 @@ class InstanceBlueprint:
     """Describes the properties of a certain instance type (e.g. number of customers)."""
 
     def __init__(self, nb_customers, depot_position, customer_position, nb_customer_cluster, demand_type, demand_min,
-                 demand_max, capacity, grid_size, n_depots=1):
+                 demand_max, capacity, grid_size, n_depots=1, vehicle_policy='RR'):
         self.nb_customers = nb_customers
         self.n_depots = n_depots 
         self.depot_position = depot_position
@@ -25,6 +25,7 @@ class InstanceBlueprint:
         self.demand_max = demand_max
         self.capacity = capacity
         self.grid_size = grid_size
+        self.vehicle_policy = vehicle_policy
 
 
 def get_blueprint(blueprint_name):

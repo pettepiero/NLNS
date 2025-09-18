@@ -33,7 +33,6 @@ def lns_single_seach_job(args):
             # Create a batch of copies of the same instances that can be repaired in parallel
             #note: lns_batch_size indicates multiple copies of the same vrp instance
             instance_copies = [deepcopy(instance) for _ in range(config.lns_batch_size)]
-            min_costs_trace = []
 
             iter = -1
             # Repeat until the time limit of one reheating iteration is reached
@@ -76,7 +75,6 @@ def lns_single_seach_job(args):
                     T_factor = -math.log(T_max / T_min)
 
                 min_costs = min(costs)
-                min_costs_trace.append((id, min_costs))
                 #print(f"DEBUG: job {id} -> min_costs: {min_costs}")
 
                 # Update incumbent if a new best solution is found
@@ -93,7 +91,6 @@ def lns_single_seach_job(args):
                     instance.solution = instance_copies[np.argmin(costs)].solution
                     cur_cost = min_costs
 
-            print(f"min_costs_trace: \n{min_costs_trace}")
             queue_results.put([incumbent_solution, incumbent_cost])
 
     except Exception as e:

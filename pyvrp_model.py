@@ -37,6 +37,7 @@ parser.add_argument(
 args = parser.parse_args()
 
 data = read_instance(args.instance_path)
+
 assert isinstance(data['capacity'], int)
 m = Model()
 num_depots = len(data['depot'])

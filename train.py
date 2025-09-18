@@ -18,7 +18,38 @@ from plot.plot import plot_instance
 import pickle
 
 
+def save_model_info(config):
+    filepath = "./list_trained_models.csv"
+    header = [
+     "Run_ID",
+     "Instance_blueprint",
+     "nb_train_batches",
+     "nb_batches_training_set",
+     "test_size",
+     "actor_lr",
+     "batch_size",
+    ] 
+    run_id = os.path.basename(config.output_path)
+    row = [
+        run_id,
+        config.instance_blueprint,
+        config.nb_train_batches,
+        config.nb_batches_training_set,
+        config.test_size,
+        config.actor_lr,
+        config.batch_size,
+    ]
+    file_exists = os.path.isfile(filepath)
+
+    with open(filepath, mode="a", newline="") as f:
+       writer = csv.writer(f)
+       if not file_exists:
+           writer.writerow(header)
+       writer.writerow(row)
+
+
 def train_nlns(actor, critic, run_id, config):
+    save_model_info(config)
     rng = np.random.default_rng(config.seed)
     batch_size = config.batch_size
 

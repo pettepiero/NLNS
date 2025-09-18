@@ -19,6 +19,8 @@ class LnsOperatorPair:
         self.model = model
         self.destroy_procedure = destroy_procedure
         self.p_destruction = p_destruction
+    def __str__(self):
+        return f"Destroy_procedure: {self.destroy_procedure} | P_destruction: {self.p_destruction}"
 
 
 def destroy_instances(rng, instances, destroy_procedure=None, destruction_p=None):
@@ -50,6 +52,7 @@ def load_operator_pairs(path, config):
         actor.eval()
 
         operator_pair = LnsOperatorPair(actor, model_data['destroy_operation'], model_data['p_destruction'])
+        print(f"DEBUG: operator_pair: {operator_pair}")
         lns_operator_pairs.append(operator_pair)
     return lns_operator_pairs
 
@@ -106,8 +109,6 @@ def evaluate_single_search(config, model_path, instance_path):
 
     output_path = os.path.join(config.output_path, "search", 'results.txt')
     results = np.array(list(zip(instance_names, costs, durations)))
-
-    print(f"DEBUG: final_instance: \n{final_instance}")
 
     np.savetxt(output_path, results, delimiter=',', fmt=['%s', '%s', '%s'], header="name, cost, runtime")
 
