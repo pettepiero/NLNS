@@ -3,6 +3,7 @@ import argparse
 import os
 from pathlib import Path
 from tqdm import tqdm 
+from vrp.data_utils import read_instances_pkl, save_dataset_vrplib
 
 def distribute_vehicles(num_depots: int, total: int):
     """
@@ -77,15 +78,30 @@ def process_file(src_path: Path, dst_path: Path, total_vehicles: int, inf_vehicl
 
 def main():
     ap = argparse.ArgumentParser(description="Copy and modify MDVRP instances by adding VEHICLES and VEHICLES_DEPOT_SECTION.")
-    ap.add_argument("src_dir", type=Path, help="Source directory containing .mdvrp files")
+    ap.add_argument("--src_dir", default=None, type=Path, help="Source directory containing .mdvrp files")
     ap.add_argument("dst_dir", type=Path, help="Destination directory for modified files")
     ap.add_argument("--vehicles", "-v", type=int, default=15, help="Total number of vehicles to add (default: 15)")
     ap.add_argument("--inf_vehicles", "--inf", "-i", action='store_true', default=False, help="Use infinite vehicles combination")
+    ap.add_argument("--from_pkl", action='store_true', default=False, help="If true then a single pkl file representing the dataset should be specified and will be read.")
+    ap.add_argument("--pkl_file", type=str, default=None, help="Path to pkl file being loaded")
     args = ap.parse_args()
+    if not args.from_pkl:
+        for src_file in tqdm(sorted(args.src_dir.glob("*.mdvrp"))):
+            dst_file = args.dst_dir / src_file.name
+            process_file(src_file, dst_file, args.vehicles, args.inf_vehicles)
+    else:
+        if args.pkl_file is None:
+            raise ValueError(f"Missing pkl file specification")
+        if not os.path.exists(args.pkl_file):
+            raise ValueError(f"Data file not found in: {args.pkl_file}")
 
-    for src_file in tqdm(sorted(args.src_dir.glob("*.mdvrp"))):
-        dst_file = args.dst_dir / src_file.name
-        process_file(src_file, dst_file, args.vehicles, args.inf_vehicles)
+        dataset = read_instances_pkl(args.pkl_file)        
+        save_dataset_vrplib(
+            instances=dataset,
+            folder=args.dst_dir,
+            start_index=1,
+            inf_vehicles=args.inf_vehicles,
+            )  
         
 
 if __name__ == "__main__":

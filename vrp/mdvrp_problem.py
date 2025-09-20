@@ -75,6 +75,18 @@ class MDVRPInstance():
             'solution': {self.solution}, \n \
             'cost': {self.get_costs(True)}"
     
+    def __eq__(self, other):
+        if not isinstance(other, MDVRPInstance):
+                    return False
+        return (
+                self.depot_indices == other.depot_indices
+                        and np.array_equal(self.locations, other.locations)
+                                and np.array_equal(self.original_locations, other.original_locations)
+                                        and np.array_equal(self.demand, other.demand)
+                                                and self.capacity == other.capacity
+                                                    )
+
+
     def get_n_closest_locations_to(self, origin_location_id, mask, n):
         """Return the idx of the n closest locations (Euclidean) sorted by distance."""
         locs = self.locations
