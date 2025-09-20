@@ -14,7 +14,7 @@ def lns_batch_search(instances, max_iterations, timelimit, operator_pairs, confi
         print(f"DEBUG: len(instances): {len(instances)} - config.lns_batch_size: {config.lns_batch_size}")
         raise Exception("Instance set size must be multiple of lns_batch_size for batch search.")
 
-    costs = [instance.get_costs_memory() for instance in instances]  # Costs for each instance
+    costs = [instance.get_costs_memory(True) for instance in instances]  # Costs for each instance
     performance_EMA = [np.inf] * len(
         operator_pairs)  # Exponential moving average of avg. improvement in last iterations
 
@@ -51,7 +51,7 @@ def lns_batch_search(instances, max_iterations, timelimit, operator_pairs, confi
         destroy_repair_duration = time.time() - start_time_destroy
 
         for i in range(len(instances)):
-            cost = instances[i].get_costs_memory()
+            cost = instances[i].get_costs_memory(True)
             # Only "accept" improving solutions
             if costs[i] < cost:
                 instances[i].solution = solution_copies[i]
@@ -85,6 +85,7 @@ def _lns_batch_search_job(args):
         print(f"Reading instances {config.instance_path} for batch search...")
         instances = read_instances_pkl(config.instance_path, test_size * i, test_size)
         print(f"...done")
+        print(f"Read {len(instances)} instances")
 
     lns_operations = search.load_operator_pairs(model_path, config)
 

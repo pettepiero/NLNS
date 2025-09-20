@@ -2,6 +2,8 @@
 import argparse
 import os
 from pathlib import Path
+from tqdm import tqdm 
+from vrp.data_utils import read_instances_pkl, save_dataset_vrplib
 
 def distribute_vehicles(num_depots: int, total: int):
     """
@@ -16,7 +18,7 @@ def distribute_vehicles(num_depots: int, total: int):
         result.extend([d] * count)
     return result
 
-def process_file(src_path: Path, dst_path: Path, total_vehicles: int):
+def process_file(src_path: Path, dst_path: Path, total_vehicles: int, inf_vehicles: bool):
     lines = src_path.read_text(encoding="utf-8", errors="ignore").splitlines()
 
     # Find indices
@@ -39,7 +41,10 @@ def process_file(src_path: Path, dst_path: Path, total_vehicles: int):
     veh_by_depot = distribute_vehicles(num_depots, total_vehicles)
 
     # Add VEHICLES line
-    vehicles_line = f"VEHICLES : {total_vehicles}"
+    if not inf_vehicles:
+        vehicles_line = f"VEHICLES : {total_vehicles}"
+    else:
+        vehicles_line = f"VEHICLES : INF"
     insert_idx_for_vehicles = idx_num_depots + 1 if idx_num_depots is not None else idx_node_section
     already_has_vehicles = any(l.strip().startswith("VEHICLES") for l in lines)
     if not already_has_vehicles:
@@ -49,21 +54,22 @@ def process_file(src_path: Path, dst_path: Path, total_vehicles: int):
         if idx_depot_section is not None and insert_idx_for_vehicles <= idx_depot_section:
             idx_depot_section += 1
 
-    # Add VEHICLES_DEPOT_SECTION
-    vds_block = ["VEHICLES_DEPOT_SECTION"] + [str(d) for d in veh_by_depot]
-    for i, blk_line in enumerate(vds_block):
-        lines.insert(idx_node_section + i, blk_line)
+    if not inf_vehicles:
+        # Add VEHICLES_DEPOT_SECTION
+        vds_block = ["VEHICLES_DEPOT_SECTION"] + [str(d) for d in veh_by_depot]
+        for i, blk_line in enumerate(vds_block):
+            lines.insert(idx_node_section + i, blk_line)
 
-    # Ensure DEPOT_SECTION ends with -1
-    if idx_depot_section is not None:
-        # find the next "EOF" line
-        try:
-            idx_eof = next(i for i, ln in enumerate(lines) if ln.strip() == "EOF")
-        except StopIteration:
-            idx_eof = len(lines)
-        # check if -1 already present just before EOF
-        if lines[idx_eof - 1].strip() != "-1":
-            lines.insert(idx_eof, "-1")
+        # Ensure DEPOT_SECTION ends with -1
+        if idx_depot_section is not None:
+            # find the next "EOF" line
+            try:
+                idx_eof = next(i for i, ln in enumerate(lines) if ln.strip() == "EOF")
+            except StopIteration:
+                idx_eof = len(lines)
+            # check if -1 already present just before EOF
+            if lines[idx_eof - 1].strip() != "-1":
+                lines.insert(idx_eof, "-1")
 
     # Write out
     dst_path.parent.mkdir(parents=True, exist_ok=True)
@@ -72,14 +78,31 @@ def process_file(src_path: Path, dst_path: Path, total_vehicles: int):
 
 def main():
     ap = argparse.ArgumentParser(description="Copy and modify MDVRP instances by adding VEHICLES and VEHICLES_DEPOT_SECTION.")
-    ap.add_argument("src_dir", type=Path, help="Source directory containing .mdvrp files")
+    ap.add_argument("--src_dir", default=None, type=Path, help="Source directory containing .mdvrp files")
     ap.add_argument("dst_dir", type=Path, help="Destination directory for modified files")
     ap.add_argument("--vehicles", "-v", type=int, default=15, help="Total number of vehicles to add (default: 15)")
+    ap.add_argument("--inf_vehicles", "--inf", "-i", action='store_true', default=False, help="Use infinite vehicles combination")
+    ap.add_argument("--from_pkl", action='store_true', default=False, help="If true then a single pkl file representing the dataset should be specified and will be read.")
+    ap.add_argument("--pkl_file", type=str, default=None, help="Path to pkl file being loaded")
     args = ap.parse_args()
+    if not args.from_pkl:
+        for src_file in tqdm(sorted(args.src_dir.glob("*.mdvrp"))):
+            dst_file = args.dst_dir / src_file.name
+            process_file(src_file, dst_file, args.vehicles, args.inf_vehicles)
+    else:
+        if args.pkl_file is None:
+            raise ValueError(f"Missing pkl file specification")
+        if not os.path.exists(args.pkl_file):
+            raise ValueError(f"Data file not found in: {args.pkl_file}")
 
-    for src_file in sorted(args.src_dir.glob("*.mdvrp")):
-        dst_file = args.dst_dir / src_file.name
-        process_file(src_file, dst_file, args.vehicles)
+        dataset = read_instances_pkl(args.pkl_file)        
+        save_dataset_vrplib(
+            instances=dataset,
+            folder=args.dst_dir,
+            start_index=1,
+            inf_vehicles=args.inf_vehicles,
+            )  
+        
 
 if __name__ == "__main__":
     main()

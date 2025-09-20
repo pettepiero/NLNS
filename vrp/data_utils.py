@@ -256,8 +256,8 @@ def read_instance(path, pkl_instance_idx=0):
         raise Exception("Unknown instance file type.")
 
 def read_instance_mdvrp(path) -> MDVRPInstance:
-    file = open(path, "r")
-    lines = [ll.strip() for ll in file]
+    with open(path, 'r', encoding="utf-8") as file:
+        lines = [ll.strip() for ll in file]
     i = 0
     while i < len(lines):
         line = lines[i]
@@ -289,14 +289,13 @@ def read_instance_mdvrp(path) -> MDVRPInstance:
             i = i + num_depots 
         i += 1
 
-
-    if ((locations[1:,:] > 0) & (locations[1:,:] < 1)).all():
+    if ((locations[1:,:] >= 0) & (locations[1:,:] <= 1)).all():
         #then grid size is 0, 1
         grid_size = 1
-    elif ((locations[1:,:] > 0) & (locations[1:,:] < 1000)).all():
+    elif ((locations[1:,:] >= 0) & (locations[1:,:] <= 1000)).all():
         #then grid size is likely 1000
         grid_size = 1000
-    elif ((locations[1:,:] > 0) & (locations[1:,:] < 1000000)).all():
+    elif ((locations[1:,:] >= 0) & (locations[1:,:] <= 1000000)).all():
         #then grid size is likely 1000000
         grid_size = 1000000
     else:
@@ -402,7 +401,7 @@ def read_instance_sd(path):
 #
 #    return instances
 
-def read_instances_pkl(path, offset=0, num_samples=None):
+def read_instances_pkl(path, offset=0, num_samples=None) -> list:
 
     with open(path, 'rb') as f:
         data = pickle.load(f)
@@ -554,7 +553,7 @@ def _write_vrp_instance(path, inst):
             f.write(f"{i} {int(d)}\n")
         f.write("EOF\n")
 
-def _write_mdvrp_instance(path, inst):
+def _write_mdvrp_instance(path, inst, inf_vehicles=False):
     coords = _coords_to_vrplib_ints(inst.original_locations)
     demand = np.asarray(inst.demand, dtype=int).ravel()
     dim = coords.shape[0]
@@ -575,6 +574,8 @@ def _write_mdvrp_instance(path, inst):
         f.write(f"CAPACITY : {cap}\n")
         f.write(f"NUM_DEPOTS : {num_depots}\n")
         f.write(f"EDGE_WEIGHT_TYPE: EUC_2D\n")
+        if inf_vehicles:
+            f.write(f"VEHICLES : INF\n")
         f.write("NODE_COORD_SECTION\n")
         for i, (x, y) in enumerate(coords):
             f.write(f"{i+1} {int(x)} {int(y)}\n")
@@ -588,10 +589,12 @@ def _write_mdvrp_instance(path, inst):
         f.write("EOF\n")
 
 def save_dataset_vrplib(
-    instances,
-    folder: str,
-    prefix: str = "inst",
-    start_index: int = 0
+    instances:      list,
+    folder:         str,
+    prefix:         str = "inst",
+    start_index:    int = 0,
+    inf_vehicles:   bool= False,
+
 ):
     assert (isinstance(instances[0], MDVRPInstance)) or (isinstance(instances[0], VRPInstance))
     os.makedirs(folder, exist_ok=True)
@@ -599,7 +602,7 @@ def save_dataset_vrplib(
     for k, inst in enumerate(instances, start=start_index):
         if isinstance(inst, MDVRPInstance):
             out_path = os.path.join(folder, f"{prefix}_{k:05d}.mdvrp")
-            _write_mdvrp_instance(out_path, inst)
+            _write_mdvrp_instance(out_path, inst, inf_vehicles)
         elif isinstance(inst, VRPInstance):
             out_path = os.path.join(folder, f"{prefix}_{k:05d}.vrp")
             _write_vrp_instance(out_path, inst)

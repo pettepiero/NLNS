@@ -46,11 +46,17 @@ for d in data['depot']:
     depot = m.add_depot(x=data['node_coord'][d][0], y=data['node_coord'][d][1])
     depots.append(depot)
 
-keys, counts = np.unique(data['vehicles_depot'], return_counts=True)
-keys = keys - 1
-keys = keys.tolist()
-counts = counts.tolist()
-depot_num_vehicles =  dict(zip(keys, counts))
+if data['vehicles'] != 'inf':
+    print(f"DEBUG: read data['vehicles'] : {data['vehicles']}, type: {type(data['vehicles'])}")
+    keys, counts = np.unique(data['vehicles_depot'], return_counts=True)
+    keys = keys - 1
+    keys = keys.tolist()
+    counts = counts.tolist()
+    depot_num_vehicles =  dict(zip(keys, counts))
+else:
+    depot_num_vehicles = {}
+    for i, d in enumerate(data['depot']):
+        depot_num_vehicles[i] = data['dimension'] - num_depots
 
 for i, d in enumerate(data['depot']):
     m.add_vehicle_type(

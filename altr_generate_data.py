@@ -146,7 +146,7 @@ if __name__ == "__main__":
 
     opts = parser.parse_args()
 
-    assert opts.filename is None or (len(opts.problems) == 1 and len(opts.graph_sizes) == 1), \
+    assert opts.filename is None or (len(opts.problem) == 1 and len(opts.graph_sizes) == 1), \
         "Can only specify filename when generating a single dataset"
     assert (opts.problem != 'mdvrp') or (opts.depot_size is not None), \
         "MDVRP dataset generation requires depot_size to be specified"
