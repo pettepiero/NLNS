@@ -62,6 +62,7 @@ ap.add_argument('--max_time', '-t', type=int, default=30, help="Maximum solve ti
 ap.add_argument('--max_num_instances', '-n', type=int, default=None, help="Maximum number of instances to solve. Default: all in the directory.")
 ap.add_argument('--nlns_model', type=str, default=None, help="NLNS model to test. Provide run number, e.g. 'run_17.9.2025_16354', or full model path if --full_model_path is set to true. See list_trained_models.csv for a list of trained NLNS models.", required=True)
 ap.add_argument('--full_model_path', default=False, action='store_true', help="Set to True if nlns_model is the full model path")
+ap.add_argument('--device', default='cuda', choices=['cuda', 'cpu'], help="Device to run on.")
 
 args = ap.parse_args()
 print(f"DEBUG: args: {vars(args)}")
@@ -97,6 +98,7 @@ cmd = [
     "--lns_batch_size", "2",
     "--lns_timelimit",  str(args.max_time),
     "--problem_type",   "mdvrp",
+    "--device", args.device,
     ]
 
 subprocess.run(cmd, check=True)

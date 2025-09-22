@@ -64,8 +64,6 @@ def evaluate_batch_search(config, model_path):
     start_time = time.time()
 
     results = search_batch.lns_batch_search_mp(config, model_path)
-    print(f"results: {results}")
-
     runtime = (time.time() - start_time)
     instance_id, costs, iterations = [], [], []
     for r in results:
@@ -77,7 +75,6 @@ def evaluate_batch_search(config, model_path):
     np.savetxt(path, np.column_stack((instance_id, costs)), delimiter=',', fmt=['%i', '%f'])
     logging.info(
         f"Test set costs: {np.mean(costs):.3f} Total Runtime (s): {runtime:.1f} Iterations: {np.mean(iterations):.1f}")
-    logging.info(f"costs: {costs}")
 
 def evaluate_single_search(config, model_path, instance_path):
     assert model_path is not None, 'No model path given'

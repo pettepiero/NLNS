@@ -51,7 +51,7 @@ def create_dataset(size, config, seed=None, create_solution=False, use_cost_memo
 
 
     if config.problem_type == 'mdvrp':
-        assert config.instance_blueprint in ['MD_1', 'MD_2', 'MD_3', 'MD_4', 'MD_5', 'MD_6', 'MD_7']
+        assert config.instance_blueprint in ['MD_1', 'MD_2', 'MD_3', 'MD_4', 'MD_5', 'MD_6', 'MD_7'], f"instance_blueprint {config.instance_blueprint} not valid."
 
     #if seed is not None:
     #    np.random.seed(seed)
@@ -82,7 +82,7 @@ def generate_Instance(blueprint, use_cost_memory, rng):
         elif blueprint.grid_size == 1000000:
             locations = original_locations / 1000000
         else:
-            assert blueprint.grid_size == 1
+            assert blueprint.grid_size == 1, f"Problem on blueprint.grid_size #0"
             locations = original_locations
 
         vrp_instance = VRPInstance(blueprint.nb_customers, locations, original_locations, demand, blueprint.capacity,
@@ -110,7 +110,7 @@ def generate_Instance(blueprint, use_cost_memory, rng):
         elif blueprint.grid_size == 1000000:
             locations = original_locations / 1000000
         else:
-            assert blueprint.grid_size == 1
+            assert blueprint.grid_size == 1, f"Problem on blueprint.grid_size #1"
             locations = original_locations
         depot_indices = list(range(blueprint.n_depots))
 
@@ -224,7 +224,7 @@ def get_customer_demand(blueprint, customer_position, rng):
         rng.shuffle(demands)
         return demands
     elif blueprint.demand_type == 'Q':
-        assert blueprint.grid_size == 1000
+        assert blueprint.grid_size == 1000, f"Problem on blueprint.grid_size #2."
         demands = np.zeros(blueprint.nb_customers, dtype=int)
         for i in range(blueprint.nb_customers):
             if (customer_position[i][0] > 500 and customer_position[i][1] > 500) or (
@@ -271,14 +271,15 @@ def read_instance_mdvrp(path) -> MDVRPInstance:
             locations = np.loadtxt(lines[i + 1:i + 1 + dimension], dtype=float)
             #quick check on customers ids so that they follow 'the start from 1 convention'
             assert locations[0, 0] == 1, f"Error in reading {path}. Node indices start from {locations[0, 0]}, expected 1"
-            locations = np.insert(locations, 0, [0, np.nan, np.nan], axis=0)
+            #locations = np.insert(locations, 0, [0, np.nan, np.nan], axis=0)
     
             locations = locations[:, 1:] # drop ids 
 
             i = i + dimension
         elif line.startswith('DEMAND_SECTION'):
             demand = np.loadtxt(lines[i + 1:i + 1 + dimension], dtype=float)
-            demand = np.insert(demand, 0, [0, np.nan], axis=0)
+            demand = demand[:, 1].astype(int)
+            #demand = np.insert(demand, 0, [0, np.nan], axis=0)
             i = i + dimension
         elif line.startswith('TYPE'):
             problem_type = line.split(':')[1]
@@ -305,19 +306,23 @@ def read_instance_mdvrp(path) -> MDVRPInstance:
 #    original_locations = locations[:, 1:]
     original_locations = locations
     locations = original_locations / grid_size 
-    demand = demand[:, 1:].squeeze()
     #depot_indices = depot_indices[:, 1:].squeeze()
     depot_indices = depot_indices.tolist()
+    # convert to my notation (indices start from 0)
     if min(depot_indices) != 0:
         depot_indices = [idx-1 for idx in depot_indices]
     assert min(depot_indices) == 0, f"Error in depot_indices convention"
 
+    #Ensure depots have zero demand
+    for d in depot_indices:
+        demand[d] = 0
+
     instance = MDVRPInstance(
-            depot_indices = depot_indices,
-            locations = locations,
-            original_locations = original_locations,
-            demand = demand, 
-            capacity = capacity,
+            depot_indices       = depot_indices,
+            locations           = locations,
+            original_locations  = original_locations,
+            demand              = demand, 
+            capacity            = capacity,
             )
 
     return instance
@@ -596,7 +601,7 @@ def save_dataset_vrplib(
     inf_vehicles:   bool= False,
 
 ):
-    assert (isinstance(instances[0], MDVRPInstance)) or (isinstance(instances[0], VRPInstance))
+    assert (isinstance(instances[0], MDVRPInstance)) or (isinstance(instances[0], VRPInstance)), f"Error in save_dataset_vrplib instances type: {type(instances[0])}."
     os.makedirs(folder, exist_ok=True)
 
     for k, inst in enumerate(instances, start=start_index):
