@@ -100,21 +100,29 @@ os.makedirs(os.path.join(output_path, "solutions"))
 os.makedirs(os.path.join(output_path, "models"))
 os.makedirs(os.path.join(output_path, "search"))
 
-cmd = [
-    "python3",  "main.py",
-    "--mode",   "eval_batch",
+cmd_nlns = [
+    "python3",          "main.py",
+    "--mode",           "eval_batch",
     "--model_path",     full_model_path,
     "--instance_path",  pkl_file,
     "--lns_batch_size", "2",
     "--lns_timelimit",  str(args.max_time),
     "--problem_type",   "mdvrp",
-    "--device", args.device,
-    "--output_path", output_path,
+    "--device",         args.device,
+    "--output_path",    output_path,
     ]
 
-subprocess.run(cmd, check=True)
+subprocess.run(cmd_nlns, check=True)
+
+cmd_pyvrp = [
+    "python3",          "pyvrp_model.py",
+    "--mode",           "eval_batch",
+    "--dir_path",       args.path,
+    "--output_dir",     output_path,
+    "--max_time",       str(args.max_time),
+    ]
+
+subprocess.run(cmd_pyvrp, check=True)
 
 
 #summarize metrics
-
-#os.remove()

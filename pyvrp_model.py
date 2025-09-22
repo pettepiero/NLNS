@@ -17,58 +17,15 @@ from pathlib import Path
 from vrp.mdvrp_problem import MDVRPInstance
 import os
 from typing import Union
+from tqdm import tqdm
 
 def eval_single(args):
     data = read_instance(args.instance_path)
-    result, m = run_pyvrp_on_instance(inst=data, only_cost=False)
-    
-    #assert isinstance(data['capacity'], int)
-    #m = Model()
-    #num_depots = len(data['depot'])
-    #depots = []
-    #for d in data['depot']:
-    #    depot = m.add_depot(x=data['node_coord'][d][0], y=data['node_coord'][d][1])
-    #    depots.append(depot)
-    #
-    #if data['vehicles'] != 'inf':
-    #    print(f"DEBUG: read data['vehicles'] : {data['vehicles']}, type: {type(data['vehicles'])}")
-    #    keys, counts = np.unique(data['vehicles_depot'], return_counts=True)
-    #    keys = keys - 1
-    #    keys = keys.tolist()
-    #    counts = counts.tolist()
-    #    depot_num_vehicles =  dict(zip(keys, counts))
-    #else:
-    #    depot_num_vehicles = {}
-    #    for i, d in enumerate(data['depot']):
-    #        depot_num_vehicles[i] = data['dimension'] - num_depots
-    #
-    #for i, d in enumerate(data['depot']):
-    #    m.add_vehicle_type(
-    #        num_available   = depot_num_vehicles[int(d)],
-    #        capacity        = data['capacity'],
-    #        start_depot     = depots[i],
-    #        end_depot       = depots[i],
-    #    )
-    #
-    #clients = [
-    #    m.add_client(
-    #        x=int(data['node_coord'][idx][0]),
-    #        y=int(data['node_coord'][idx][1]),
-    #        delivery=int(data['demand'][idx]),
-    #    )
-    #    for idx in range(num_depots, len(data['node_coord']))
-    #]
-    #
-    #locations = depots + clients
-    #
-    #for frm_idx, frm in enumerate(locations):
-    #    for to_idx, to in enumerate(locations):
-    #        #distance = abs(frm.x - to.x) + abs(frm.y - to.y)  # Manhattan
-    #        distance = np.sqrt((frm.x - to.x)**2 + (frm.y - to.y)**2) 
-    #        m.add_edge(frm, to, distance=distance)
-    #
-    #result = m.solve(stop=MaxRuntime(args.max_time), display=True)
-    
+    result, m = run_pyvrp_on_instance(
+                inst        = data, 
+                only_cost   = False,
+                display     = True
+                )
     print(result)
     
     if args.plot_solution:
@@ -79,7 +36,7 @@ def eval_single(args):
     plt.show()
 
 
-def run_pyvrp_on_instance(inst: MDVRPInstance, only_cost: bool = False) -> Union[float, tuple]:
+def run_pyvrp_on_instance(inst: MDVRPInstance, only_cost: bool = False, display: bool = False) -> Union[float, tuple]:
     """
     Runs PyVRP on instance. Returns only cost is only_cost is True, otherwise returns Result.
     """
@@ -127,9 +84,9 @@ def run_pyvrp_on_instance(inst: MDVRPInstance, only_cost: bool = False) -> Union
             distance = np.sqrt((frm.x - to.x)**2 + (frm.y - to.y)**2) 
             m.add_edge(frm, to, distance=distance)
     
-    result = m.solve(stop=MaxRuntime(args.max_time), display=True)
+    result = m.solve(stop=MaxRuntime(args.max_time), display=display)
     if only_cost:    
-        return result.best.cost # I hope this works 
+        return result.best.distance_cost() 
     else:
         return result, m
 
@@ -150,16 +107,17 @@ def read_instances(dir_path: Path) -> list:
 def eval_batch(args):
     instances = read_instances(args.dir_path)
     results = [] 
-    for i, inst in enumerate(instances):
+    for i, inst in tqdm(enumerate(instances)):
         cost = run_pyvrp_on_instance(
                 inst        = inst,
-                only_cost   = True)
+                only_cost   = True,
+                display     = False)
         results.append([i, cost])
 
     output_filename = os.path.join(args.output_dir, "pyrvp_eval_batch.txt" ) 
     with open(output_filename, 'a') as f:
         for i, el in enumerate(results):
-            f.write([i, el])
+            f.write(f"{i},{el}\n")
 
     print(f"Written cost results of PyVRP in file: {output_filename}")
 
@@ -211,5 +169,5 @@ if __name__ == '__main__':
         eval_batch(args)
     
     elif args.mode == 'eval_single':
-        assert args.instance_path is not None, f"Missing argument instance_path in 'eval_batch' mode"
+        assert args.instance_path is not None, f"Missing argument instance_path in 'eval_single' mode"
         eval_single(args)
