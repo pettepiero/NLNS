@@ -4,6 +4,8 @@ from pathlib import Path
 from tqdm import tqdm
 from vrp.data_utils import save_dataset_pkl, read_instance_mdvrp, read_instances_pkl
 import subprocess
+import datetime
+import numpy as np
 
 def read_dir(directory: Path, max_num_instances: int) -> Path:
     assert os.path.exists(directory), f"Provided path {directory} doesn't exist"
@@ -90,6 +92,14 @@ assert os.path.exists(model_path), f"Provided model_path doesn't exists"
 print(f"\n**********************************************\nCalling NLNS model to run on batch:\n")
 # execute NLNS batch eval
 
+run_id = np.random.randint(10000, 99999)
+output_path = os.getcwd()
+now = datetime.datetime.now()
+output_path = os.path.join(output_path, "runs", f"run_{now.day}.{now.month}.{now.year}_{run_id}")
+os.makedirs(os.path.join(output_path, "solutions"))
+os.makedirs(os.path.join(output_path, "models"))
+os.makedirs(os.path.join(output_path, "search"))
+
 cmd = [
     "python3",  "main.py",
     "--mode",   "eval_batch",
@@ -99,6 +109,7 @@ cmd = [
     "--lns_timelimit",  str(args.max_time),
     "--problem_type",   "mdvrp",
     "--device", args.device,
+    "--output_path", output_path,
     ]
 
 subprocess.run(cmd, check=True)
@@ -106,4 +117,4 @@ subprocess.run(cmd, check=True)
 
 #summarize metrics
 
-
+#os.remove()

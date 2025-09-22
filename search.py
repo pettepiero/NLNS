@@ -71,8 +71,9 @@ def evaluate_batch_search(config, model_path):
         costs.extend(r[1])
         iterations.append(r[2])
 
-    path = os.path.join(config.output_path, "search", 'results.txt')
+    path = os.path.join(config.output_path, "search", 'nlns_batch_search_results.txt')
     np.savetxt(path, np.column_stack((instance_id, costs)), delimiter=',', fmt=['%i', '%f'])
+    print(f"Saved results of batch search in {path}")
     logging.info(
         f"Test set costs: {np.mean(costs):.3f} Total Runtime (s): {runtime:.1f} Iterations: {np.mean(iterations):.1f}")
 
