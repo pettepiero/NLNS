@@ -83,7 +83,10 @@ def _lns_batch_search_job(args):
         print(f"...done")
     else:
         print(f"Reading instances {config.instance_path} for batch search...")
-        instances = read_instances_pkl(config.instance_path, test_size * i, test_size)
+        instances = read_instances_pkl(
+                path=config.instance_path, 
+                offset=test_size * i, 
+                num_samples=test_size)
         print(f"...done")
         print(f"Read {len(instances)} instances")
 

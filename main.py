@@ -43,13 +43,14 @@ if __name__ == '__main__':
     # Creating output directories
     if config.output_path == "":
         config.output_path = os.getcwd()
-    now = datetime.datetime.now()
-    config.output_path = os.path.join(config.output_path, "runs", f"run_{now.day}.{now.month}.{now.year}_{run_id}")
-    os.makedirs(os.path.join(config.output_path, "solutions"))
-    os.makedirs(os.path.join(config.output_path, "models"))
-    os.makedirs(os.path.join(config.output_path, "search"))
-    if config.video:
-        os.makedirs(os.path.join(config.output_path, "images"))
+
+        now = datetime.datetime.now()
+        config.output_path = os.path.join(config.output_path, "runs", f"run_{now.day}.{now.month}.{now.year}_{run_id}")
+        os.makedirs(os.path.join(config.output_path, "solutions"))
+        os.makedirs(os.path.join(config.output_path, "models"))
+        os.makedirs(os.path.join(config.output_path, "search"))
+        if config.video:
+            os.makedirs(os.path.join(config.output_path, "images"))
 
     # Create logger and log run parameters
     logging.basicConfig(

@@ -4,6 +4,8 @@ from pathlib import Path
 from tqdm import tqdm
 from vrp.data_utils import save_dataset_pkl, read_instance_mdvrp, read_instances_pkl
 import subprocess
+import datetime
+import numpy as np
 
 def read_dir(directory: Path, max_num_instances: int) -> Path:
     assert os.path.exists(directory), f"Provided path {directory} doesn't exist"
@@ -62,6 +64,7 @@ ap.add_argument('--max_time', '-t', type=int, default=30, help="Maximum solve ti
 ap.add_argument('--max_num_instances', '-n', type=int, default=None, help="Maximum number of instances to solve. Default: all in the directory.")
 ap.add_argument('--nlns_model', type=str, default=None, help="NLNS model to test. Provide run number, e.g. 'run_17.9.2025_16354', or full model path if --full_model_path is set to true. See list_trained_models.csv for a list of trained NLNS models.", required=True)
 ap.add_argument('--full_model_path', default=False, action='store_true', help="Set to True if nlns_model is the full model path")
+ap.add_argument('--device', default='cuda', choices=['cuda', 'cpu'], help="Device to run on.")
 
 args = ap.parse_args()
 print(f"DEBUG: args: {vars(args)}")
@@ -89,19 +92,37 @@ assert os.path.exists(model_path), f"Provided model_path doesn't exists"
 print(f"\n**********************************************\nCalling NLNS model to run on batch:\n")
 # execute NLNS batch eval
 
-cmd = [
-    "python3",  "main.py",
-    "--mode",   "eval_batch",
+run_id = np.random.randint(10000, 99999)
+output_path = os.getcwd()
+now = datetime.datetime.now()
+output_path = os.path.join(output_path, "runs", f"run_{now.day}.{now.month}.{now.year}_{run_id}")
+os.makedirs(os.path.join(output_path, "solutions"))
+os.makedirs(os.path.join(output_path, "models"))
+os.makedirs(os.path.join(output_path, "search"))
+
+cmd_nlns = [
+    "python3",          "main.py",
+    "--mode",           "eval_batch",
     "--model_path",     full_model_path,
     "--instance_path",  pkl_file,
     "--lns_batch_size", "2",
     "--lns_timelimit",  str(args.max_time),
     "--problem_type",   "mdvrp",
+    "--device",         args.device,
+    "--output_path",    output_path,
     ]
 
-subprocess.run(cmd, check=True)
+subprocess.run(cmd_nlns, check=True)
+
+cmd_pyvrp = [
+    "python3",          "pyvrp_model.py",
+    "--mode",           "eval_batch",
+    "--dir_path",       args.path,
+    "--output_dir",     output_path,
+    "--max_time",       str(args.max_time),
+    ]
+
+subprocess.run(cmd_pyvrp, check=True)
 
 
 #summarize metrics
-
-
