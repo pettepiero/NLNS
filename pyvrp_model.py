@@ -114,10 +114,12 @@ def eval_batch(args):
                 display     = False)
         results.append([i, cost])
 
-    output_filename = os.path.join(args.output_dir, "pyrvp_eval_batch.txt" ) 
+    output_filename = os.path.join(args.output_dir, "search", "pyvrp_eval_batch.txt" ) 
     with open(output_filename, 'a') as f:
-        for i, el in enumerate(results):
-            f.write(f"{i},{el}\n")
+        for el in results:
+            print(el)
+            i, cost = el
+            f.write(f"{i},{cost}\n")
 
     print(f"Written cost results of PyVRP in file: {output_filename}")
 

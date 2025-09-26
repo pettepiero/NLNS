@@ -88,7 +88,7 @@ def _lns_batch_search_job(args):
                 offset=test_size * i, 
                 num_samples=test_size)
         print(f"...done")
-        print(f"Read {len(instances)} instances")
+        print(f"Finished reading {len(instances)} instances")
 
     lns_operations = search.load_operator_pairs(model_path, config)
 
