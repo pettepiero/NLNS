@@ -141,15 +141,20 @@ class MDVRPInstance():
             rng.shuffle(available_customers) 
             for i, cust in enumerate(available_customers): 
                 dem = int(self.demand[cust])
+                print(f"DEBUG: self.solution[-1]: {self.solution[-1]}")
                 if dem <= cur_load:
+                    print(f"dem <= cur_load")
+                    print(f"dem: {dem} | cur_load: {cur_load}")
                     self.solution[-1].append([cust, dem, None])  
                     cur_load -= dem
                 else:
                     self.solution[-1].append([depot, 0, input_idx])
                     self.solution.append([[depot, 0, input_idx]])
+                    self.solution[-1].append([cust, dem, None])
                     cur_load = self.capacity
-
+            self.solution[-1].append([depot, 0, input_idx])
             self.solution.append([[depot, 0, input_idx]])
+            print(f"Closed route on depot {depot}")
 
     
     def create_initial_solution(self):
