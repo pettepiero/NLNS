@@ -27,6 +27,7 @@ def get_config():
     parser.add_argument('--lns_destruction', default="P", type=str)
     parser.add_argument('--instance_blueprint', default="ALTR_20", type=str)
     parser.add_argument('--valid_size', default=500, type=int)
+    parser.add_argument('--rand_init_sol', default=False, type=bool, help="If True, creates non greedy but random initial solutions")
 
     # Search
     parser.add_argument('--model_path', default=None, type=str)

@@ -119,6 +119,37 @@ class MDVRPInstance():
                 closest_depot = d
     
         return closest_depot 
+
+    def create_initial_solution_random(self, rng: np.random.Generator):
+        #1 create clusters for each depot
+        depot_to_customer = {} # dict mapping depot id to list of customers in cluster
+        for depot in self.depot_indices:
+            depot_to_customer[depot] = []
+        
+        for idx in self.customer_indices:
+            nearest_depot = self.get_nearest_depot(idx)
+            depot_to_customer[nearest_depot].append(idx)
+        
+        #randomly connect customers to their depot
+        for input_idx, depot in enumerate(self.depot_indices):
+            available_customers = depot_to_customer[depot]
+            self.solution.append([[depot, 0, input_idx]]) 
+         
+            cur_load = self.capacity
+
+            rng.shuffle(available_customers) 
+            for i, cust in enumerate(available_customers): 
+                dem = self.demand[cust]
+                if dem <= cur_load:
+                    self.solution[-1].append([cust, dem, None])  
+                    cur_load -= dem
+                else:
+                    self.solution[-1].append([depot, 0, input_idx])
+                    self.solution.append([[depot, 0, input_idx]])
+                    cur_load = self.capacity
+
+            self.solution.append([[depot, 0, input_idx]])
+
     
     def create_initial_solution(self):
         """Create an initial solution for this instance using a greedy heuristic."""
