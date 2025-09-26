@@ -119,6 +119,38 @@ class MDVRPInstance():
                 closest_depot = d
     
         return closest_depot 
+
+    def create_initial_solution_random(self, rng: np.random.Generator):
+        #1 create clusters for each depot
+        depot_to_customer = {} # dict mapping depot id to list of customers in cluster
+        for depot in self.depot_indices:
+            depot_to_customer[depot] = []
+        
+        for idx in self.customer_indices:
+            nearest_depot = self.get_nearest_depot(idx)
+            depot_to_customer[nearest_depot].append(idx)
+        
+        self.solution = []
+        #randomly connect customers to their depot
+        for input_idx, depot in enumerate(self.depot_indices):
+            available_customers = depot_to_customer[depot]
+            self.solution.append([[depot, 0, input_idx]]) 
+         
+            cur_load = self.capacity
+
+            rng.shuffle(available_customers) 
+            for i, cust in enumerate(available_customers): 
+                dem = int(self.demand[cust])
+                if dem <= cur_load:
+                    self.solution[-1].append([cust, dem, None])  
+                    cur_load -= dem
+                else:
+                    self.solution[-1].append([depot, 0, input_idx])
+                    self.solution.append([[depot, 0, input_idx]])
+                    cur_load = self.capacity
+
+            self.solution.append([[depot, 0, input_idx]])
+
     
     def create_initial_solution(self):
         """Create an initial solution for this instance using a greedy heuristic."""
@@ -492,6 +524,7 @@ class MDVRPInstance():
             if combined_demand > self.capacity:
                 print(f"DEBUG: combined_demand: {combined_demand} > self.capacity: {self.capacity}")
                 print(f"DEBUG: failed connecting tour_from: {tour_from} to tour_to: {tour_to}")
+                print(f"DEBUG: tour_from demand: {sum(l[1] for l in tour_from)} to tour_to demand: {sum(l[1] for l in tour_to)}")
                 print("\n")
             assert combined_demand <= self.capacity  # This is ensured by the masking schema
 
@@ -652,7 +685,6 @@ def get_mask(origin_nn_input_idx, dynamic_input, instances, config, capacity):
     """
     device = dynamic_input.device
     batch_size, N, _ = dynamic_input.shape
-
     # Make sure origin indices are a 1-D torch.LongTensor on the right device
     origin_idx = torch.as_tensor(origin_nn_input_idx, device=device, dtype=torch.long).view(-1)
     assert origin_idx.size(0) == batch_size, f"origin_idx batch {origin_idx.size(0)} != dynamic_input batch {batch_size}"
@@ -660,7 +692,6 @@ def get_mask(origin_nn_input_idx, dynamic_input, instances, config, capacity):
     # Start with all 'alive' input positions (i.e. all non-zero ones)
     #mask = (dynamic_input[:, :, 1] != 0).cpu().long().numpy()
     mask = (dynamic_input[:, :, 1] != 0).clone() #the not deactivated inputs
-
 
     # FIRST PART: avoid connecting both ends of the same tour or connecting to itself (creating cycles)
     for i in range(batch_size):
@@ -729,22 +760,6 @@ def get_mask(origin_nn_input_idx, dynamic_input, instances, config, capacity):
         #mask[combined_demand > capacity] = 0
         mask &= ~(combined_demand > capacity)
 
-    #guarantee at least one valid action per row
-    for i in range(batch_size):
-        if not mask[i].any():
-            inst = instances[i]
-            # Recover the origin tour to know the "home" depot (if any)
-            origin_idx_i = int(origin_nn_input_idx[i])
-            origin_tour, _ = inst.nn_input_idx_to_tour[origin_idx_i]
-            home_depot = get_depot(origin_tour, inst.depot_indices)
-
-            # Reset depot choices according to your policy
-            if home_depot is not None:
-                mask[i, inst.depot_indices] = False
-                mask[i, home_depot] = True
-            else:
-                # No depot yet in the origin tour: allow all depots
-                mask[i, inst.depot_indices] = True
     return mask
 
 def get_depot(tour: list, depot_indices: list):

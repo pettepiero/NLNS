@@ -95,11 +95,17 @@ def train_nlns(actor, critic, run_id, config):
             if config.problem_type == 'mdvrp':
                 for el in tqdm(train_instances):
                     instance = read_instance_mdvrp(os.path.join(config.train_filepath, el))
-                    instance.create_initial_solution()
+                    if config.rand_init_sol:
+                        instance.create_initial_solution_random(rng)
+                    else:
+                        instance.create_initial_solution()
                     training_set.append(instance)
                 for el in tqdm(val_instances):
                     instance = read_instance_mdvrp(os.path.join(config.val_filepath, el))
-                    instance.create_initial_solution()
+                    if config.rand_init_sol:
+                        instance.create_initial_solution_random(rng)
+                    else:
+                        instance.create_initial_solution()
                     validation_instances.append(instance)
             elif config.problem_type == 'vrp':
                 for el in tqdm(train_instances):

@@ -111,6 +111,20 @@ class MDVRP_instance_test(unittest.TestCase):
         self.assertEqual(len(sol), len(known_solution))
         self.assertEqual(sol, known_solution)
 
+    def test_create_initial_solution_random(self):
+        rng = np.random.default_rng()
+        self.mdvrp_instance.create_initial_solution_random(rng)
+        sol = self.mdvrp_instance.solution
+  
+
+        print(f"capacity: {self.mdvrp_instance.capacity}") 
+        for el in sol:
+            print(el)
+
+        for route in sol:
+            #check that they start and end at depot
+            self.assertTrue(route[0][0] in self.mdvrp_instance.depot_indices)
+            self.assertTrue(route[-1][0] in self.mdvrp_instance.depot_indices)
 
     def test_destroy(self):
         self.mdvrp_instance.create_initial_solution()
@@ -625,6 +639,107 @@ class MDVRP_instance_test(unittest.TestCase):
         # generate batch_size instances
         training_set = create_dataset(size=batch_size, config=config,
                                   create_solution=True, use_cost_memory=False, seed=config.seed)
+        for instance in training_set:
+            instance.destroy_point_based(p=0.3, rng=rng)
+
+        # Create batch input
+        input_size      = max([ins.get_max_nb_input_points() for ins in training_set])
+        static_input    = np.zeros((batch_size, input_size, 2))
+        dynamic_input   = np.zeros((batch_size, input_size, 2), dtype='int')
+        nn_origin_indices  = np.zeros((batch_size), dtype=int)
+        for i, instance in enumerate(training_set):
+            static_nn_input, dynamic_nn_input = instance.get_network_input(input_size) #this updates open_nn_input_idx
+            static_input[i]     = static_nn_input
+            dynamic_input[i]    = dynamic_nn_input
+            if (nn_origin_indices[i] == 0 or int(nn_origin_indices[i]) in instance.depot_indices): #and not instance_repaired[i]:
+                if rng is None:
+                    nn_origin_indices[i] = np.random.choice(instance.open_nn_input_idx, 1).item()
+                else:
+                    nn_origin_indices[i] = rng.choice(instance.open_nn_input_idx, 1).item()
+
+        static_input    = torch.from_numpy(static_input).to(config.device).float()
+        dynamic_input   = torch.from_numpy(dynamic_input).to(config.device).long()
+        mask            = get_mask(nn_origin_indices, dynamic_input, training_set, config, config.capacity).to(config.device)
+        # assertions
+        for i, instance in enumerate(training_set):
+            origin = nn_origin_indices[i]
+            self.assertEqual(mask[i, origin], False) # assert origin cannot be sampled again
+            origin_tour, origin_pos = instance.nn_input_idx_to_tour[origin]
+            same_tour_idxs = [
+                j for j, entry in enumerate(instance.nn_input_idx_to_tour)
+                if entry is not None and entry[0] is origin_tour
+            ]
+            
+            assert len(same_tour_idxs) <= 2
+            for j in same_tour_idxs:
+                self.assertFalse(mask[i, j], f"Index {j} points to same tour as origin {origin} but is not masked")
+
+            same_tour_idxs = [
+                j for j, entry in enumerate(instance.nn_input_idx_to_tour)
+                if entry is not None and entry[0] is origin_tour
+            ]
+            for j in same_tour_idxs:
+                self.assertFalse(mask[i, j], f"Index {j} points to same tour as origin {origin} but is not masked")
+
+
+            #assert on tour and pos
+            self.assertEqual(origin_tour[origin_pos][2], origin)
+
+            home_depot = get_depot(origin_tour, instance.depot_indices)
+            if home_depot is not None:
+                depot_indices = deepcopy(instance.depot_indices)
+                depot_indices = [idx for idx in depot_indices if idx != home_depot]
+                known_sol = torch.zeros(len(depot_indices), dtype=torch.bool, device=mask.device)
+                # allow connecting only to home_depot among depot nodes
+                self.assertTrue(torch.equal(mask[i, depot_indices], known_sol))
+                self.assertEqual(mask[i, home_depot], True)
+            else:
+                self.assertEqual(np.array_equal(mask[i, instance.depot_indices], np.array([True]*len(instance.depot_indices))), True)
+
+            #capacity masking assertions
+            customers_of_tour = [cust[0] for cust in origin_tour]
+            sum_of_demands = sum([instance.demand[cust] for cust in customers_of_tour])
+            self.assertEqual(dynamic_input[i, origin][0], sum_of_demands)
+
+            for idx, el in enumerate(mask[i]):
+                if el.item() is True:
+                    cand_tour, cand_pos = instance.nn_input_idx_to_tour[idx]
+                    cand_customer = cand_tour[cand_pos][0]
+                    cand_customer_demand = instance.demand[cand_customer]
+                    self.assertTrue(cand_customer_demand + origin_tour[origin_pos][1] <= instance.capacity)
+
+
+    def test_get_mask_2(self):
+        rng = np.random.default_rng(1234)
+        batch_size = 100 
+        num_batches = 2
+        train_filepath = 'overfit_dataset/'
+        config = argparse.Namespace(
+                #instance_blueprint='MD_7', 
+                instance_blueprint='MD_6', 
+                problem_type='mdvrp',
+                seed=0,
+                capacity=6,
+                device='cpu',
+                split_delivery=False,
+                )
+        lns_batch_size=50
+
+        if os.path.isdir(train_filepath):
+            # check that there are files that end with 'mdvrp' or 'vrp'
+            train_instances = [ins for ins in os.listdir(train_filepath) if os.path.isfile(os.path.join(train_filepath, ins))]
+            train_instances = [ins for ins in train_instances if os.path.splitext(ins)[1] in ['.mdvrp', 'vrp']]
+            print(f"Found {len(train_instances)} train instances")
+            #convert to mdvrpinstance list
+            print("Converting instances from files to VRPInstance/MDVRPInstance list...")
+
+            training_set = []
+            for el in tqdm(train_instances):
+                instance = read_instance_mdvrp(os.path.join(train_filepath, el))
+                instance.create_initial_solution_random(rng)
+                training_set.append(instance)
+            print("...done")
+
         for instance in training_set:
             instance.destroy_point_based(p=0.3, rng=rng)
 

@@ -86,9 +86,10 @@ def _actor_model_forward(actor, instances, static_input, dynamic_input, config, 
         ptr_np = ptr.cpu().numpy()
         for i, instance in enumerate(instances):
             idx_from = origin_idx[i].item()
-            idx_to = ptr_np[i]
+            idx_to = ptr_np[i].item()
             if idx_from in instance.depot_indices and idx_to in instance.depot_indices:  # No need to update in this case
                 continue
+
             nn_input_update, cur_nn_input_idx = instance.do_action(idx_from, idx_to)  # Connect origin to select point
             for s in nn_input_update:
                 s.insert(0, i)
