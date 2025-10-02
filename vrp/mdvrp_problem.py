@@ -523,14 +523,6 @@ class MDVRPInstance():
         pos_from = self.nn_input_idx_to_tour[id_from][1]  # Position of the location that should be connected in tour_from
         pos_to = self.nn_input_idx_to_tour[id_to][1]  # Position of the location that should be connected in tour_to
 
-
-        #DEBUG
-        d_from = sum(l[1] for l in tour_from)
-        d_to   = sum(l[1] for l in tour_to)
-        assert d_from + d_to <= self.capacity, \
-            f"Capacity violation before merge: from={d_from}, to={d_to}, cap={self.capacity}"
-        #####################
-
         # Exchange tour_from with tour_to or invert order of the tours. This reduces the number of cases that need
         # to be considered in the following.
         if len(tour_from) > 1 and len(tour_to) > 1:

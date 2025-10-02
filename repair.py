@@ -101,30 +101,6 @@ def _actor_model_forward(actor, instances, static_input, dynamic_input, config, 
             if idx_from in instance.depot_indices and idx_to in instance.depot_indices:  # No need to update in this case
                 continue
 
-            ##############################################################################################################
-            #DEBUG
-            # ... before do_action:
-            n_depots = instances[i].n_depots
-            true_from, dyn_from_cmp = _expected_dyn_for_idx(instances[i], dynamic_input, i, origin_idx[i].item(), n_depots)
-            true_to,   dyn_to_cmp   = _expected_dyn_for_idx(instances[i], dynamic_input, i, ptr_np[i].item(), n_depots)
-            
-            if dyn_from_cmp is not None:  # not a depot
-                assert true_from == dyn_from_cmp, \
-                    f"Demand desync at FROM: true {true_from} vs dyn {dyn_from_cmp} (inst {i})"
-            
-            if dyn_to_cmp is not None:  # not a depot
-                assert true_to == dyn_to_cmp, \
-                    f"Demand desync at TO: true {true_to} vs dyn {dyn_to_cmp} (inst {i})"
-            tour_from = instance.nn_input_idx_to_tour[idx_from][0]  # Tour that should be connected
-            tour_to = instance.nn_input_idx_to_tour[idx_to][0]  # to this tour.
-            demand_from = sum(l[1] for l in tour_from)
-            demand_to = sum(l[1] for l in tour_to)
-            demand =  demand_from + demand_to 
-            assert demand_from <= instance.capacity
-            assert demand_to <= instance.capacity
-            assert demand <= instance.capacity
-            #############################################################################################################
-
             nn_input_update, cur_nn_input_idx = instance.do_action(idx_from, idx_to)  # Connect origin to select point
             for s in nn_input_update:
                 s.insert(0, i)
