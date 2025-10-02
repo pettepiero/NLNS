@@ -2,10 +2,12 @@ import unittest
 import torch
 import numpy as np
 from vrp.mdvrp_problem import MDVRPInstance, get_mask, get_depot
-from vrp.data_utils import create_dataset
+from vrp.data_utils import create_dataset, read_instance_mdvrp
 from search import destroy_instances
 import argparse
 from copy import deepcopy
+import os
+from tqdm import tqdm
 
 class MDVRP_instance_test(unittest.TestCase):
     """ Tests based on the instance generated in setUp() method.
@@ -711,8 +713,8 @@ class MDVRP_instance_test(unittest.TestCase):
 
     def test_get_mask_2(self):
         rng = np.random.default_rng(1234)
-        batch_size = 100 
-        num_batches = 2
+        batch_size = 200 
+        num_batches = 1
         train_filepath = 'overfit_dataset/'
         config = argparse.Namespace(
                 #instance_blueprint='MD_7', 

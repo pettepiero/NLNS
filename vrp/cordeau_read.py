@@ -225,3 +225,219 @@ def convert_cordeau_to_vrplib(input_path: str, output_path: str | None = None) -
         f.write(text)
     return output_path
 
+
+
+def convert_vrplib_to_cordeau(input_path: str, output_path: str | None = None) -> str:
+    """
+    Convert a VRPLIB instance (CVRP or MDVRP) into a Cordeau-style text file
+    that is round-trip compatible with convert_cordeau_to_vrplib() above.
+
+    VRPLIB assumptions (as produced/consumed by PyVRP and this module):
+      - TYPE: "CVRP" (single depot) or "MDVRP" (multi depot).
+      - DEPOT_SECTION lists depot indices (ending with -1).
+      - DEMAND_SECTION provides integer demands; depots have demand 0.
+      - CAPACITY is a single scalar (uniform Q for all depots).
+      - VEHICLES present (integer).
+      - NODE_COORD_SECTION present with 2D coordinates.
+      - VEHICLES_DEPOT_SECTION is ignored here (Cordeau does not store per-depot counts).
+
+    Cordeau output (matching this module's parser):
+      - First line: "type m n t" where type=0 for CVRP, 2 for MDVRP.
+      - Next t lines: "D Q" with D=0 and Q=CAPACITY for each depot.
+      - Node lines:
+          * type=0 (CVRP): depot first (index 0), then n customers 1..n
+          * type=2 (MDVRP): n customers 1..n first, then t depots (n+1 .. n+t)
+        Each node line: "i x y d q" with d=0 and q= demand (0 at depots).
+
+    Returns the path to the written Cordeau file.
+    """
+    p = Path(input_path)
+    if not p.exists():
+        raise FileNotFoundError(input_path)
+
+    # --- read raw lines and collect sections
+    with open(p, "r", encoding="utf-8") as f:
+        raw = [ln.rstrip("\n") for ln in f]
+
+    # Simple helper to find section indices
+    def find_line(startswith: str) -> int | None:
+        for i, ln in enumerate(raw):
+            if ln.strip().upper().startswith(startswith):
+                return i
+        return None
+
+    # Header fields
+    def read_scalar_after(prefix: str, cast=int) -> int | float | str:
+        idx = find_line(prefix)
+        if idx is None:
+            raise CordeauFormatError(f"Missing header line starting with '{prefix}'.")
+        try:
+            return cast(raw[idx].split(":")[1].strip())
+        except Exception as e:
+            raise CordeauFormatError(f"Malformed header: '{raw[idx]}'") from e
+
+    name = None
+    name_idx = find_line("NAME")
+    if name_idx is not None:
+        try:
+            name = raw[name_idx].split(":")[1].strip()
+        except Exception:
+            name = p.stem
+    else:
+        name = p.stem
+
+    type_line = find_line("TYPE")
+    if type_line is None:
+        raise CordeauFormatError("Missing TYPE line.")
+    type_token = raw[type_line].split(":")[1].strip().upper()
+    if type_token not in ("CVRP", "MDVRP"):
+        raise NotImplementedError(f"TYPE '{type_token}' not supported (only CVRP/MDVRP).")
+
+    dimension = int(read_scalar_after("DIMENSION"))
+    vehicles = int(read_scalar_after("VEHICLES"))
+    capacity = int(read_scalar_after("CAPACITY"))
+    # EDGE_WEIGHT_TYPE is ignored; coordinates are taken as-is.
+
+    # --- Parse DEPOT_SECTION
+    dep_idx = find_line("DEPOT_SECTION")
+    if dep_idx is None:
+        raise CordeauFormatError("Missing DEPOT_SECTION.")
+    depots: list[int] = []
+    i = dep_idx + 1
+    while i < len(raw):
+        s = raw[i].strip()
+        if not s:
+            i += 1
+            continue
+        if s == "EOF":
+            break
+        try:
+            val = int(s.split()[0])
+        except Exception:
+            break
+        if val == -1:
+            break
+        depots.append(val)
+        i += 1
+    if not depots:
+        raise CordeauFormatError("DEPOT_SECTION contains no depots.")
+    t = len(depots)
+
+    # --- Parse NODE_COORD_SECTION
+    nc_idx = find_line("NODE_COORD_SECTION")
+    if nc_idx is None:
+        raise CordeauFormatError("Missing NODE_COORD_SECTION.")
+    coords: dict[int, tuple[float, float]] = {}
+    j = nc_idx + 1
+    while j < len(raw):
+        s = raw[j].strip()
+        if not s or s.upper().startswith(("DEMAND_SECTION", "DEPOT_SECTION", "EOF", "VEHICLES_DEPOT_SECTION")):
+            break
+        toks = s.split()
+        if len(toks) < 3:
+            raise CordeauFormatError(f"Malformed NODE_COORD_SECTION line: '{s}'")
+        idx = int(float(toks[0]))
+        x = float(toks[1]); y = float(toks[2])
+        coords[idx] = (x, y)
+        j += 1
+
+    # --- Parse DEMAND_SECTION
+    dem_idx = find_line("DEMAND_SECTION")
+    if dem_idx is None:
+        raise CordeauFormatError("Missing DEMAND_SECTION.")
+    demand: dict[int, int] = {}
+    k = dem_idx + 1
+    while k < len(raw):
+        s = raw[k].strip()
+        if not s or s.upper().startswith(("NODE_COORD_SECTION", "DEPOT_SECTION", "EOF", "VEHICLES_DEPOT_SECTION")):
+            break
+        toks = s.split()
+        if len(toks) < 2:
+            raise CordeauFormatError(f"Malformed DEMAND_SECTION line: '{s}'")
+        idx = int(float(toks[0])); q = int(float(toks[1]))
+        demand[idx] = q
+        k += 1
+
+    # --- Basic validation
+    all_indices = set(coords.keys())
+    if set(demand.keys()) != all_indices:
+        missing_d = sorted(all_indices - set(demand.keys()))
+        missing_c = sorted(set(demand.keys()) - all_indices)
+        raise CordeauFormatError(f"Mismatch between coordinates and demands. "
+                                 f"Missing demands for: {missing_d}; stray demand indices: {missing_c}")
+
+    # Identify depots/customers as per DEPOT_SECTION
+    depot_set = set(depots)
+    for d in depot_set:
+        if d not in all_indices:
+            raise CordeauFormatError(f"Depot index {d} not present in NODE_COORD_SECTION.")
+        if demand.get(d, 0) != 0:
+            raise CordeauFormatError(f"Depot index {d} has non-zero demand ({demand[d]}).")
+
+    # Customers are all nodes not in depots
+    customer_ids = sorted(idx for idx in all_indices if idx not in depot_set)
+    n = len(customer_ids)
+
+    # Sanity for dimension
+    if dimension != len(all_indices):
+        # Not fatal, but warn the user by raising (keeps behavior strict like the forward converter)
+        raise CordeauFormatError(f"DIMENSION={dimension} does not match number of nodes={len(all_indices)}.")
+
+    # --- Compose Cordeau text (round-trip compatible with the forward converter)
+    if type_token == "CVRP":
+        if t != 1:
+            # CVRP must have exactly one depot here
+            raise CordeauFormatError(f"CVRP expects exactly one depot, found t={t}.")
+        type_ = 0
+        # Header: type m n t
+        header = f"{type_} {vehicles} {n} {t}"
+
+        # D Q block: single line; D=0
+        dq_lines = [f"0 {capacity}"]
+
+        # Node lines: depot first (index 0), then customers 1..n
+        # We map VRPLIB depot id -> (0) and customers -> 1..n in the order they appear when sorted by id.
+        depot_id_vrplib = depots[0]
+        dep_x, dep_y = coords[depot_id_vrplib]
+        nodes_lines = [f"0 {dep_x} {dep_y} 0 0"]
+
+        # Preserve original order of customers as they appear when sorting by index ascending,
+        # which matches typical VRPLIB authoring and is stable under our forward converter.
+        for new_i, old_idx in enumerate(sorted(customer_ids), start=1):
+            x, y = coords[old_idx]
+            q = demand[old_idx]
+            nodes_lines.append(f"{new_i} {x} {y} 0 {q}")
+
+        lines_out = [header, *dq_lines, *nodes_lines]
+
+    else:  # MDVRP
+        type_ = 2
+        # Require uniform capacity (one CAPACITY scalar already implies this).
+        # Header: type m n t
+        header = f"{type_} {vehicles} {n} {t}"
+
+        # D Q block: t lines; use D=0, Q=capacity for each depot.
+        dq_lines = [f"0 {capacity}" for _ in range(t)]
+
+        # Node lines: first n customers -> indices 1..n, then t depots -> indices n+1..n+t
+        # Customers: use ascending VRPLIB indices not in depots
+        nodes_lines = []
+        for new_i, old_idx in enumerate(sorted(customer_ids), start=1):
+            x, y = coords[old_idx]; q = demand[old_idx]
+            nodes_lines.append(f"{new_i} {x} {y} 0 {q}")
+
+        # Depots at the end in the order provided by DEPOT_SECTION (preserve user intent)
+        for offset, old_idx in enumerate(depots, start=1):
+            x, y = coords[old_idx]
+            nodes_lines.append(f"{n + offset} {x} {y} 0 0")
+
+        lines_out = [header, *dq_lines, *nodes_lines]
+
+    # --- Write file
+    if output_path is None:
+        output_path = str(p.with_suffix(".cordeau.txt"))
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines_out) + "\n")
+
+    return output_path
+

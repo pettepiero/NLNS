@@ -62,6 +62,12 @@ class MDVRPInstance():
         else:
             self.costs_memory = None
     
+        self._depot_sentinels = [
+                [[dep_idx, 0, d]] for d, dep_idx in enumerate(self.depot_indices)
+                ]
+
+
+
     #def get_n_closest_locations_to(self, origin_location_id, mask, n):
         #"""Return the idx of the n closest locations sorted by distance."""
         #distances = np.array([np.inf] * len(mask))
@@ -134,11 +140,11 @@ class MDVRPInstance():
         #randomly connect customers to their depot
         for input_idx, depot in enumerate(self.depot_indices):
             available_customers = depot_to_customer[depot]
+            rng.shuffle(available_customers) 
             self.solution.append([[depot, 0, input_idx]]) 
          
             cur_load = self.capacity
 
-            rng.shuffle(available_customers) 
             for i, cust in enumerate(available_customers): 
                 dem = int(self.demand[cust])
                 if dem <= cur_load:
@@ -148,9 +154,15 @@ class MDVRPInstance():
                     self.solution[-1].append([depot, 0, input_idx])
                     self.solution.append([[depot, 0, input_idx]])
                     self.solution[-1].append([cust, dem, None])
-                    cur_load = self.capacity
-            self.solution[-1].append([depot, 0, input_idx])
-            self.solution.append([[depot, 0, input_idx]])
+                    cur_load = self.capacity - dem
+
+            if self.solution[-1][-1][0] != depot:
+                self.solution[-1].append([depot, 0, input_idx])
+
+        #check capacity constraints here
+        for tour in self.solution:
+            d = sum(l[1] for l in tour)
+            assert d <= self.capacity, f"Capacity bug in tour: {tour}"
     
     def create_initial_solution(self):
         """Create an initial solution for this instance using a greedy heuristic."""
@@ -382,7 +394,10 @@ class MDVRPInstance():
 
     def get_network_input(self, input_size):
         """Generate the tensor representation of an incomplete solution (i.e, a representation of the repair problem).
-         The input size must be provided so that the representations of all inputs of the batch have the same size.
+        The input size must be provided so that the representations of all inputs of the batch have the same size.
+        Also updated nn_input_idx_to_tour attribute.
+
+        Composition of a network input:
 
         [:, 0] x-coordinates for all points
         [:, 1] y-coordinates for all points
@@ -398,14 +413,15 @@ class MDVRPInstance():
 
         network_input_idx_to_tour = [None] * input_size
         for d in range(self.n_depots): 
-            network_input_idx_to_tour[d] = [self.solution[d], 0] #IMPORTANT: first part of solution have to be depots!!
+            #network_input_idx_to_tour[d] = [self.solution[d], 0] #IMPORTANT: first part of solution have to be depots!!
+            network_input_idx_to_tour[d] = [self._depot_sentinels[d], 0] #IMPORTANT: first part of solution have to be depots!!
         i = self.n_depots 
         destroyed_location_idx = []
         
-        if self.incomplete_tours is None:
+        if self.incomplete_tours is None: #make sure incomplete tours are updated first
             self.incomplete_tours = self._get_incomplete_tours()
-        incomplete_tours = self.incomplete_tours
-        for tour in incomplete_tours:
+
+        for tour in self.incomplete_tours:
             # Create an input for a tour consisting of a single customer
             if len(tour) == 1:
                 nn_input[i, :2] = self.locations[tour[0][0]] #coordinates of customer
@@ -485,16 +501,36 @@ class MDVRPInstance():
                 self.nn_input_idx_to_tour[nn_input_idx_end] = [tour, len(tour) - 1]
         return nn_input_update
 
-    def do_action(self, id_from, id_to):
-        """Performs an action. The tour end represented by input with the id id_from is connected to the tour end
-         presented by the input with id id_to."""
-
+    def do_action(self, id_from: int, id_to: int) -> tuple:
+        """
+        Performs an action. The tour end represented by input with the id id_from is connected to the tour end
+        presented by the input with id id_to.
+        
+        :param id_from: An integer representing the ID of the network input candidate that will be connected before connection point
+        :type id_from: int
+        :param id_to: An integer representing the ID of the network input candidate that will be connected after connection point
+        :type id_to: int
+        :raises AssertionError: When the combined demand is greater than vehicle capacity
+        :raises ValueError: When tour_to (after rearrangement of tours) has len != 1 and but tour_from has len <= 1 
+        :return: A tuple of two elements: nn_input update information and index of input corresponding to last connected node
+        :rtype: tuple
+        """
+        # Get tours and positions 
         tour_from = self.nn_input_idx_to_tour[id_from][0]  # Tour that should be connected
         if self.nn_input_idx_to_tour[id_to] is None:
             print(id_to)
         tour_to = self.nn_input_idx_to_tour[id_to][0]  # to this tour.
         pos_from = self.nn_input_idx_to_tour[id_from][1]  # Position of the location that should be connected in tour_from
         pos_to = self.nn_input_idx_to_tour[id_to][1]  # Position of the location that should be connected in tour_to
+
+
+        #DEBUG
+        d_from = sum(l[1] for l in tour_from)
+        d_to   = sum(l[1] for l in tour_to)
+        assert d_from + d_to <= self.capacity, \
+            f"Capacity violation before merge: from={d_from}, to={d_to}, cap={self.capacity}"
+        #####################
+
         # Exchange tour_from with tour_to or invert order of the tours. This reduces the number of cases that need
         # to be considered in the following.
         if len(tour_from) > 1 and len(tour_to) > 1:
@@ -510,6 +546,29 @@ class MDVRPInstance():
             tour_from, tour_to = tour_to, tour_from
         elif len(tour_from) > 1 and pos_from == 0:
             tour_from.reverse()
+
+
+        # if you're trying to connect to a depot, simply append the depot
+        if id_to < self.n_depots: # this works because the first n_depots element of network input are always depots
+            depot_node = self.depot_indices[id_to]
+            nn_input_update = []
+            if len(tour_from) > 1:
+                nn_input_update.append([tour_from[-1][2], 0, 0])
+            tour_from.append([depot_node, 0, id_to])
+            #if len(tour_from) > 1:
+            #    nn_input_update.append([tour_from[pos_from][2], 0, 0])
+            #tour_from.insert(pos_from, [depot_node, 0, id_to])
+
+            total = sum(l[1] for l in tour_from)
+            nn_input_update.extend(self._get_network_input_update_for_tour(tour_from, total))
+            # do not remove depot input from open_nn_input_idx
+            for update in nn_input_update:
+                if update[2] == 0 and update[0] not in list(range(self.n_depots)):
+                    if update[0] not in self.open_nn_input_idx:
+                        print(f"Didn't find {update[0]} in: \n {self.open_nn_input_idx}")
+                    self.open_nn_input_idx.remove(update[0])
+            return nn_input_update, id_to
+
 
         # Now we only need to consider two cases 1) Connecting an incomplete tour with more than one location
         # to an incomplete tour with more than one location 2) Connecting an incomplete tour (single
@@ -534,49 +593,26 @@ class MDVRPInstance():
             nn_input_update.append([tour_to[0][2], 0, 0])
             tour_from.extend(tour_to)
 
-            for t in self.solution:
-                if t is tour_to:
-                    self.solution.remove(t)
-                    break
-            #self.solution.remove(tour_to)
+            self.solution.remove(tour_to)
             nn_input_update.extend(self._get_network_input_update_for_tour(tour_from, combined_demand))
 
         # Case 2
-        if len(tour_to) == 1:
+        elif len(tour_to) == 1:
             demand_from = sum(l[1] for l in tour_from)
             combined_demand = demand_from + sum(l[1] for l in tour_to)
-            unfulfilled_demand = combined_demand - self.capacity
+            #unfulfilled_demand = combined_demand - self.capacity
 
             # The new tour has a total demand that is smaller than or equal to the vehicle capacity
-            if unfulfilled_demand <= 0:
-                if len(tour_from) > 1:
-                    nn_input_update.append([tour_from[-1][2], 0, 0])
-                # Update solution
-                tour_from.extend(tour_to)
-                for t in self.solution:
-                    if t is tour_to:
-                        self.solution.remove(t)
-                        break
-
-                #self.solution.remove(tour_to)
-                # Generate input update
-                nn_input_update.extend(self._get_network_input_update_for_tour(tour_from, combined_demand))
-            # The new tour has a total demand that is larger than the vehicle capacity
-            else:
-                raise NotImplementedError #think about this (split delivery?)
+            assert combined_demand <= self.capacity  # This is ensured by the masking schema
+            if len(tour_from) > 1:
                 nn_input_update.append([tour_from[-1][2], 0, 0])
-                if len(tour_from) > 1 and tour_from[0][0] not in self.depot_indices:
-                    nn_input_update.append([tour_from[0][2], 0, 0])
-
-                # Update solution
-                tour_from.append([tour_to[0][0], tour_to[0][1], tour_to[0][2]])  # deepcopy of tour_to
-                tour_from[-1][1] = self.capacity - demand_from
-                tour_from.append([0, 0, 0])
-                if tour_from[0][0] not in self.depot_indices:
-                    tour_from.insert(0, [0, 0, 0])
-                tour_to[0][1] = unfulfilled_demand  # Update demand of tour_to
-                # Generate input update
-                nn_input_update.extend(self._get_network_input_update_for_tour(tour_to, unfulfilled_demand))
+            # Update solution
+            tour_from.extend(tour_to)
+            self.solution.remove(tour_to)
+            # Generate input update
+            nn_input_update.extend(self._get_network_input_update_for_tour(tour_from, combined_demand))
+        else:
+            raise ValueError(f"Something went wrong in do_action")
 
         # Add depot tours to the solution tours if they were removed
         for idx, d in enumerate(self.depot_indices):
@@ -584,7 +620,8 @@ class MDVRPInstance():
                 self.solution.insert(idx, [[d, 0, idx]])
                 self.nn_input_idx_to_tour[idx] = [self.solution[idx], 0]
 
-        depot_input_indices = [i-1 for i in self.depot_indices]
+        #depot_input_indices = [i-1 for i in self.depot_indices]
+        depot_input_indices = list(range(self.n_depots))
 
         for update in nn_input_update:
             #if update[2] == 0 and update[0] != 0:
@@ -597,11 +634,16 @@ class MDVRPInstance():
         return nn_input_update, tour_from[-1][2]
 
     def _rebuild_idx_mapping(self):
+        self.incomplete_tours = self._get_incomplete_tours()
         len_input = self.get_max_nb_input_points()
 
         result = [None]*len_input
-        for idx, d in enumerate(self.depot_indices):
-            result[idx] = [self.solution[idx], 0]
+
+        for d in range(self.n_depots):
+            result[d] = [self._depot_sentinels[d], 0] # nn_input [0..n_depots-1] are always depots
+
+        #for idx, d in enumerate(self.depot_indices):
+        #    result[idx] = [self.solution[idx], 0]
         i = self.n_depots
 
         for tour in self.incomplete_tours:
