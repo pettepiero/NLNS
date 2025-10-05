@@ -51,7 +51,7 @@ def create_dataset(size, config, seed=None, create_solution=False, use_cost_memo
 
 
     if config.problem_type == 'mdvrp':
-        assert config.instance_blueprint in ['MD_1', 'MD_2', 'MD_3', 'MD_4', 'MD_5', 'MD_6', 'MD_7'], f"instance_blueprint {config.instance_blueprint} not valid."
+        assert config.instance_blueprint in ['MD_1', 'MD_2', 'MD_3', 'MD_4', 'MD_5', 'MD_6', 'MD_7', 'MD_8'], f"instance_blueprint {config.instance_blueprint} not valid."
 
     #if seed is not None:
     #    np.random.seed(seed)
