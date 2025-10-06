@@ -34,7 +34,17 @@ import torch
 VERSION = "0.3.0"
 
 if __name__ == '__main__':
-    run_id = np.random.randint(10000, 99999)
+    if config.output_path == "":
+        run_id = np.random.randint(10000, 99999)
+    else:
+        match = re.search(r"run_\d{1,2}\.\d{1,2}\.\d{4}_(\d+)", args.output_path)
+        if match:
+            run_id = int(match.group(1))
+            logging.info(f"Matched passed run_id : {run_id}")
+        else:
+            run_id = np.random.randint(10000, 99999)
+            logging.info(f"Generated run_id : {run_id}")
+
     config = config.get_config()
 
     if config.seed is not None:
