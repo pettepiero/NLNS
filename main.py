@@ -30,14 +30,18 @@ if multiprocessing.get_start_method(allow_none=True) != "spawn":
     multiprocessing.set_start_method("spawn", force=True)
 from vrp.data_utils import read_instances_pkl
 import torch
+import re
 
 VERSION = "0.3.0"
 
 if __name__ == '__main__':
+    config = config.get_config()
+    run_id = None
+
     if config.output_path == "":
         run_id = np.random.randint(10000, 99999)
     else:
-        match = re.search(r"run_\d{1,2}\.\d{1,2}\.\d{4}_(\d+)", args.output_path)
+        match = re.search(r"run_\d{1,2}\.\d{1,2}\.\d{4}_(\d+)", config.output_path)
         if match:
             run_id = int(match.group(1))
             logging.info(f"Matched passed run_id : {run_id}")
@@ -45,7 +49,6 @@ if __name__ == '__main__':
             run_id = np.random.randint(10000, 99999)
             logging.info(f"Generated run_id : {run_id}")
 
-    config = config.get_config()
 
     if config.seed is not None:
         torch.manual_seed(config.seed)

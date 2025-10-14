@@ -28,6 +28,7 @@ def get_config():
     parser.add_argument('--instance_blueprint', default="ALTR_20", type=str)
     parser.add_argument('--valid_size', default=500, type=int)
     parser.add_argument('--rand_init_sol', default=False, type=bool, help="If True, creates non greedy but random initial solutions")
+    parser.add_argument('--scale_rewards', default=False, action='store_true')
 
     # Search
     parser.add_argument('--model_path', default=None, type=str)
@@ -51,6 +52,7 @@ def get_config():
     parser.add_argument('--val_filepath', default=None, type=str)
     parser.add_argument('--dataset_format', default=None, type=str, choices=['vrplib', 'pkl'])
     parser.add_argument('--plot_solution', '--plot-solution', default=False, action='store_true')
+    parser.add_argument('--log_f', type=int, default=250, help="How many batches to log metrics. Default 250 batches.")
 
     config = parser.parse_args()
 
