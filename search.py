@@ -13,6 +13,7 @@ from vrp.mdvrp_problem import MDVRPInstance
 from tqdm import trange
 from pyvrp.plotting import plot_solution
 from pyvrp import read as pyvrp_read
+from tqdm import tqdm
 
 class LnsOperatorPair:
     def __init__(self, model, destroy_procedure, p_destruction):
@@ -81,7 +82,7 @@ def evaluate_single_search(config, model_path, instance_path):
     assert model_path is not None, 'No model path given'
     assert instance_path is not None, 'No instance path given'
 
-    instance_names, costs, durations = [], [], []
+    instance_names, instance_ids, costs, durations = [], [], [], []
     logging.info("### Single instance search ###")
 
     if instance_path.endswith(".vrp") or instance_path.endswith(".sd") or instance_path.endswith(".mdvrp"):
@@ -93,22 +94,26 @@ def evaluate_single_search(config, model_path, instance_path):
     elif os.path.isdir(instance_path):
         instance_files_path = [os.path.join(instance_path, f) for f in os.listdir(instance_path)]
         logging.info("Starting solving all instances in directory")
+        print(f"Found {len(instance_files_path)} instances in directory")
     else:
         raise Exception("Unknown instance file format.")
 
-    for i, instance_path in enumerate(instance_files_path):
+    for i, instance_path in enumerate(tqdm(instance_files_path)):
         if instance_path.endswith(".pkl") or instance_path.endswith(".vrp") or instance_path.endswith(".sd") or instance_path.endswith(".mdvrp"):
             for jj in range(config.nb_runs):
-                cost, duration, final_instance = search_single.lns_single_search_mp(instance_path, config.lns_timelimit, config,
-                                                                    model_path, i)
+                cost, duration, final_instance = search_single.lns_single_search_mp(instance_path, config.lns_timelimit, config, model_path, i)
                 instance_names.append(instance_path)
+                instance_ids.append(i)
                 costs.append(cost)
                 durations.append(duration)
 
-    output_path = os.path.join(config.output_path, "search", 'results.txt')
-    results = np.array(list(zip(instance_names, costs, durations)))
+    output_path_with_times = os.path.join(config.output_path, "search", 'nlns_batch_search_results_with_times.txt')
+    output_path = os.path.join(config.output_path, "search", 'nlns_batch_search_results.txt')
+    results_with_times= np.array(list(zip(instance_names, costs, durations)))
+    results = np.array(list(zip(instance_ids, costs)))
 
-    np.savetxt(output_path, results, delimiter=',', fmt=['%s', '%s', '%s'], header="name, cost, runtime")
+    np.savetxt(output_path_with_times, results_with_times, delimiter=',', fmt=['%s', '%s', '%s'], header="name, cost, runtime")
+    np.savetxt(output_path, results, delimiter=',',)
 
     logging.info(
         f"NLNS single search evaluation results: Total Nb. Runs: {len(costs)}, "
@@ -127,7 +132,8 @@ def evaluate_single_search(config, model_path, instance_path):
     logging.info(f"\t# clients: {final_instance.nb_customers}")
     logging.info(f"\t# n_depots: {final_instance.n_depots}")
     logging.info(f"\t# depot indices: {final_instance.depot_indices}")
-    logging.info(f"\t# costs: {final_instance.get_costs(True)}")
+    #logging.info(f"\t# costs: {final_instance.get_costs(True)}")
+    logging.info(f"\t# costs: {final_instance.get_costs()}")
 
 def evaluate_multi_depot_search(config, instance_path):
     assert instance_path is not None, "No instance path given"

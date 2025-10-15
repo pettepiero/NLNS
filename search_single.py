@@ -93,7 +93,6 @@ def lns_single_seach_job(args):
                     cur_cost = min_costs
 
             queue_results.put([incumbent_solution, incumbent_cost])
-            print(f"Finished search")
 
     except Exception as e:
         print("Exception in lns_single_search job: {0}".format(e))
@@ -107,7 +106,8 @@ def lns_single_search_mp(instance_path, timelimit, config, model_path, pkl_insta
     # plot initial instance 
     dir_path = os.path.dirname(model_path)
     #plot_instance(instance, f"{dir_path}/initial_snapshot.png")
-    incumbent_costs = instance.get_costs(config.round_distances)
+    #incumbent_costs = instance.get_costs(config.round_distances)
+    incumbent_costs = instance.get_costs()
     instance.verify_solution(config)
 
     m = Manager()
@@ -120,13 +120,11 @@ def lns_single_search_mp(instance_path, timelimit, config, model_path, pkl_insta
 
     objective_trace = []
     objective_trace.append((0.0, float(incumbent_costs)))
-    print(f"DEBUG: incumbent_costs: {incumbent_costs}")
 
     # Distribute starting solution to search processes
     for i in range(config.lns_nb_cpus):
         queue_jobs.put([instance.solution, incumbent_costs])
     
-    print(f"starting while time.time()...") 
     while time.time() - start_time < timelimit:
         try:
             result = queue_results.get(timeout=0.2)
@@ -140,15 +138,12 @@ def lns_single_search_mp(instance_path, timelimit, config, model_path, pkl_insta
             if cost < incumbent_costs:
                 incumbent_costs = cost
                 instance.solution = result[0]
-                print('incumbent_costs', incumbent_costs)
         # Distribute incumbent solution to search processes
         queue_jobs.put([instance.solution, incumbent_costs])
-    print(f"Finished while time.time()")
     pool.terminate()
     duration = time.time() - start_time
     instance.verify_solution(config)
 
-    print(f"objective_trace length = {len(objective_trace)}; last = {objective_trace[-1] if objective_trace else None}") 
 
     trace_path = os.path.join(dir_path, f"objective_trace_{os.path.basename(instance_path).replace(os.sep, '_')}.csv")
     with open(trace_path, "w", newline="") as f:
@@ -156,13 +151,11 @@ def lns_single_search_mp(instance_path, timelimit, config, model_path, pkl_insta
         w.writerow(["time_sec", "incumbent_cost"])
         w.writerows(objective_trace)
 
-    print(f"Wrote objective trace to {trace_path}")
-
-
     # plot final instance 
-    plot_path = f"{dir_path}/final_snapshot.png"
-    #plot_instance(instance, plot_path)
-    print(f"Plotted result to {plot_path}")
-    return instance.get_costs(config.round_distances), duration, instance
+    #plot_path = f"{dir_path}/final_snapshot.png"
+    ##plot_instance(instance, plot_path)
+    #print(f"Plotted result to {plot_path}")
+    #return instance.get_costs(config.round_distances), duration, instance
+    return instance.get_costs(), duration, instance
 
 
