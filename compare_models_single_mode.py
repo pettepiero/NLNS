@@ -88,7 +88,7 @@ ap.add_argument('--lns_t_max', default=1000, type=int, help="Maximum reheating t
 ap.add_argument('--lns_t_min', default=10, type=int, help="Minimum reheating temperature for Simulated Annealing of single instance search")
 ap.add_argument('--lns_reheating_nb', default=5, type=int, help="Number of reheating operations for Simulated Annealing of single instance search")
 ap.add_argument('--lns_Z_param', default=0.8, type=float, help="What percentage of the search focuses on generating neighbouring solution. See NLNS paper (expressed between 0 and 1)")
-
+ap.add_argument('--lns_nb_cpus', default=1, type=int, help="How many instances compose the search batch B in single instance search") 
 
 run_id = np.random.randint(10000, 99999)
 output_path = os.getcwd()
@@ -152,6 +152,7 @@ cmd_nlns = [
     "--lns_t_min",          str(args.lns_t_min),
     "--lns_reheating_nb",   str(args.lns_reheating_nb),
     "--lns_Z_param",        str(args.lns_Z_param),
+    "--lns_nb_cpus",        str(args.lns_nb_cpus),
     ]
 
 logging.debug(f"NLNS command: {cmd_nlns}")
