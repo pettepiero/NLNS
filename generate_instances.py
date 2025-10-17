@@ -22,8 +22,8 @@ def write_mdvrplib(filename, config, name="problem", convention='mine'):
         shift = 1
 
     depot_indices = list(range(shift, blueprint.n_depots+shift))
-    node_latitudes = np.random.randint(low=MIN_LAT, high=MAX_LAT, size=blueprint.nb_customers).tolist()
-    node_longitudes = np.random.randint(low=MIN_LON, high=MAX_LON, size=blueprint.nb_customers).tolist()
+    node_latitudes = np.random.randint(low=MIN_LAT, high=MAX_LAT, size=blueprint.nb_customers + blueprint.n_depots).tolist()
+    node_longitudes = np.random.randint(low=MIN_LON, high=MAX_LON, size=blueprint.nb_customers + blueprint.n_depots).tolist()
     nodes_coordinates = list(zip(node_latitudes, node_longitudes))
     demands = rng.poisson(lam=1.0, size=blueprint.nb_customers + blueprint.n_depots)
     # Replace any zeros with 1 (to avoid zero demand)
@@ -39,34 +39,36 @@ def write_mdvrplib(filename, config, name="problem", convention='mine'):
                 ("NAME", name),
                 ("TYPE", "MDVRP"),
                 ("DIMENSION", blueprint.nb_customers + blueprint.n_depots),
+                ("CAPACITY", blueprint.capacity),
                 ("NUM_DEPOTS", blueprint.n_depots),
                 ("EDGE_WEIGHT_TYPE", config['dist_type']),
-                ("CAPACITY", blueprint.capacity),
+                ("VEHICLES", 'INF'),
             )
-        ]))
-        f.write("\n")
-        f.write("DEPOT_SECTION\n")
-        f.write("\n".join([
-            "{}\t{}".format(i + shift, d)
-            #"{}\t{}".format(i, d)
-            for i, d in enumerate(depot_indices)
         ]))
         f.write("\n")
         f.write("NODE_COORD_SECTION\n")
         f.write("\n".join([
-            "{}\t{}\t{}".format(i + shift, x, y)
+            "{} {} {}".format(i + shift, x, y)
             #"{}\t{}\t{}".format(i, x, y)
             for i, (x, y) in enumerate(nodes_coordinates)
         ]))
         f.write("\n")
         f.write("DEMAND_SECTION\n")
         f.write("\n".join([
-            "{}\t{}".format(i + shift, d)
+            "{} {}".format(i + shift, int(d))
             #"{}\t{}".format(i, d)
             for i, d in enumerate(demands)
         ]))
         f.write("\n")
-        f.write("-1\n")
+        f.write("DEPOT_SECTION\n")
+        f.write("\n".join([
+            "{}".format(d)
+            #"{}\t{}".format(i + shift, d)
+            #"{}\t{}".format(i, d)
+            for i, d in enumerate(depot_indices)
+        ]))
+        f.write("\n")
+        #f.write("-1\n")
         f.write("EOF\n")
         print(f"Written data to file: {filename}")
 
@@ -87,7 +89,7 @@ def write_vrplib(filename, loc, demand, capacity, grid_size, name="problem"):
         f.write("\n")
         f.write("NODE_COORD_SECTION\n")
         f.write("\n".join([
-            "{}\t{}\t{}".format(i + 1, x, y)
+            "{} {} {}".format(i + 1, x, y)
             for i, (x, y) in enumerate(loc)
         ]))
         f.write("\n")
