@@ -83,6 +83,13 @@ ap.add_argument('--nlns_model', type=str, default=None, help="NLNS model to test
 ap.add_argument('--full_model_path', default=False, action='store_true', help="Set to True if nlns_model is the full model path")
 ap.add_argument('--device', default='cuda', choices=['cuda', 'cpu'], help="Device to run on.")
 
+# LNS single instance search parameters
+ap.add_argument('--lns_t_max', default=1000, type=int, help="Maximum reheating temperature for Simulated Annealing of single instance search")
+ap.add_argument('--lns_t_min', default=10, type=int, help="Minimum reheating temperature for Simulated Annealing of single instance search")
+ap.add_argument('--lns_reheating_nb', default=5, type=int, help="Number of reheating operations for Simulated Annealing of single instance search")
+ap.add_argument('--lns_Z_param', default=0.8, type=float, help="What percentage of the search focuses on generating neighbouring solution. See NLNS paper (expressed between 0 and 1)")
+
+
 run_id = np.random.randint(10000, 99999)
 output_path = os.getcwd()
 now = datetime.datetime.now()
@@ -98,9 +105,7 @@ print(f"Running compare_models_single_mode.py with run_id {run_id}")
 print(f"Log of this execution is being written to {log_filename}")
 
 logging.debug(f"Log of compare_models_single_mode.py run on {now.day}/{now.month}/{now.year} at {now.hour}:{now.minute}:{now.second}")
-
 logging.debug(f"Parsed args:")
-
 for el in vars(args):
     logging.debug(f"{el}")
 
@@ -134,15 +139,19 @@ logging.debug(f"\n**********************************************\nCalling NLNS m
 # execute NLNS batch eval
 
 cmd_nlns = [
-    "python3",          "main.py",
-    "--mode",           "eval_single",
-    "--model_path",     full_model_path,
-    "--instance_path",  args.path,
-    "--lns_batch_size", "2",
-    "--lns_timelimit",  str(args.nlns_max_time_per_instance),
-    "--problem_type",   "mdvrp",
-    "--device",         args.device,
-    "--output_path",    output_path,
+    "python3",              "main.py",
+    "--mode",               "eval_single",
+    "--model_path",         full_model_path,
+    "--instance_path",      args.path,
+    "--lns_batch_size",     "2",
+    "--lns_timelimit",      str(args.nlns_max_time_per_instance),
+    "--problem_type",       "mdvrp",
+    "--device",             args.device,
+    "--output_path",        output_path,
+    "--lns_t_max",          str(args.lns_t_max),
+    "--lns_t_min",          str(args.lns_t_min),
+    "--lns_reheating_nb",   str(args.lns_reheating_nb),
+    "--lns_Z_param",        str(args.lns_Z_param),
     ]
 
 logging.debug(f"NLNS command: {cmd_nlns}")
@@ -152,19 +161,30 @@ subprocess.run(cmd_nlns, check=True)
 logging.debug(f"Written NLNS objective traces to {models_dir}/objective_trace_inst_INST_NUM.mdvrp.csv")
 
 logging.debug(f"\n*****************************************************")
-logging.debug("Running PyVRP model...\n")
 
-cmd_pyvrp = [
-    "python3",          "pyvrp_model.py",
-    "--mode",           "eval_batch",
-    "--dir_path",       args.path,
-    "--output_dir",     output_path,
-    "--max_time",       str(args.pyvrp_max_time_per_instance),
-    ]
+# first check if results are already available
+pyvrp_filepath = f'pyvrp_runs/{args.path}_{args.pyvrp_max_time_per_instance}.csv'
+# if available, read those directly
+found_pyvrp_file = False
+if os.path.isfile(pyvrp_filepath):
+    found_pyvrp_file = True
+    logging.debug(f"Found already solved instances: {pyvrp_filepath}")
 
-logging.debug(f"PyVRP command: {cmd_pyvrp}")
-
-subprocess.run(cmd_pyvrp, check=True)
+if not found_pyvrp_file:
+    # if not available, call model
+    logging.debug("Running PyVRP model...\n")
+    
+    cmd_pyvrp = [
+        "python3",          "pyvrp_model.py",
+        "--mode",           "eval_batch",
+        "--dir_path",       args.path,
+        "--output_dir",     output_path,
+        "--max_time",       str(args.pyvrp_max_time_per_instance),
+        ]
+    
+    logging.debug(f"PyVRP command: {cmd_pyvrp}")
+    
+    subprocess.run(cmd_pyvrp, check=True)
 
 #summarize metrics
 nlns_costs = []
@@ -176,9 +196,13 @@ nlns_costs = [
     f"{idx},{round(float(cost))}" for idx, cost in (item.split(",") for item in nlns_costs)
     ]
 pyvrp_costs = []
-pyvrp_filepath = os.path.join(output_path, "search", "pyvrp_eval_batch.txt")
+if not found_pyvrp_file:
+    pyvrp_filepath = os.path.join(output_path, "search", "pyvrp_eval_batch.txt")
 with open(pyvrp_filepath, 'r') as f:
     pyvrp_costs = f.read().splitlines()
+    print(f"pyvrp_costs: {pyvrp_costs}")
+    print(f"nlns_costs: {nlns_costs}")
+    assert len(pyvrp_costs) == len(nlns_costs)
 
 logging.debug(f"Saved NLNS costs to: {nlns_filepath}")
 logging.debug(f"Saved PyVRP costs to: {pyvrp_filepath}")
