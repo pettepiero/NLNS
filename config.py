@@ -55,6 +55,7 @@ def get_config():
     parser.add_argument('--dataset_format', default=None, type=str, choices=['vrplib', 'pkl'])
     parser.add_argument('--plot_solution', '--plot-solution', default=False, action='store_true')
     parser.add_argument('--log_f', type=int, default=250, help="How many batches to log metrics. Default 250 batches.")
+    parser.add_argument('--wandb',  action='store_false', default=True, help="Disables wandb logging when called")
 
     config = parser.parse_args()
 

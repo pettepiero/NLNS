@@ -53,15 +53,17 @@ def train_nlns(actor, critic, run_id, config):
     rng = np.random.default_rng(config.seed)
     batch_size = config.batch_size
 
-    # wandb logging
-    wandb.init(
-        project="cmdvrp-nlns",
-        id=str(run_id),
-        tags=["training"],
-        config=config,
-    )
-    wandb.define_metric('batch_idx')
-    wandb.define_metric('train/*', step_metric='batch_idx')
+
+    if config.wandb:
+        # wandb logging
+        wandb.init(
+            project="cmdvrp-nlns",
+            id=str(run_id),
+            tags=["training"],
+            config=config,
+        )
+        wandb.define_metric('batch_idx')
+        wandb.define_metric('train/*', step_metric='batch_idx')
 
     if not config.load_dataset:
         logging.info("Generating training data...")
@@ -179,7 +181,8 @@ def train_nlns(actor, critic, run_id, config):
 
     logging.info("Starting training...")
     
-    wandb.watch(actor, log='all', log_freq=log_f)
+    if config.wandb:
+        wandb.watch(actor, log='all', log_freq=log_f)
     
     for batch_idx in trange(1, config.nb_train_batches + 1):
     #for batch_idx in range(1, config.nb_train_batches + 1):
@@ -258,32 +261,33 @@ def train_nlns(actor, critic, run_id, config):
                 #w.writerow([now, batch_idx, mean_reward, mean_loss, mean_critic_loss, train_cost_batch, val_cost_snapshot, cost_gap])
                 w.writerow([now, batch_idx, mean_reward, mean_loss, mean_critic_loss, train_cost_batch, val_cost_snapshot])
 
-            wandb.log({
-                'batch_idx': int(batch_idx), 
-                'train/reward': float(mean_reward), 
-                'train/actor_loss': float(mean_loss), 
-                'train/critic_loss': float(mean_critic_loss),
-                'adv/mean': float(advantage.mean()),
-                'adv/std': float(advantage.std()),
-                'adv/abs_mean': float(advantage.abs().mean()),
-                
-                'grads/actor/total_preclip': float(actor_total_grad_preclip),
-                'grads/actor/total_postclip': float(actor_total_grad_postclip),
-                'grads/critic/total_preclip': float(critic_total_grad_preclip),
-                'grads/critic/total_postclip': float(critic_total_grad_postclip),
-                'grads/max_grad_norm': float(config.max_grad_norm),
+            if config.wandb:
+                wandb.log({
+                    'batch_idx': int(batch_idx), 
+                    'train/reward': float(mean_reward), 
+                    'train/actor_loss': float(mean_loss), 
+                    'train/critic_loss': float(mean_critic_loss),
+                    'adv/mean': float(advantage.mean()),
+                    'adv/std': float(advantage.std()),
+                    'adv/abs_mean': float(advantage.abs().mean()),
+                    
+                    'grads/actor/total_preclip': float(actor_total_grad_preclip),
+                    'grads/actor/total_postclip': float(actor_total_grad_postclip),
+                    'grads/critic/total_preclip': float(critic_total_grad_preclip),
+                    'grads/critic/total_postclip': float(critic_total_grad_postclip),
+                    'grads/max_grad_norm': float(config.max_grad_norm),
 
-                'grads/actor/mean': actor_gs['agg']['grad_norm/mean'],
-                'grads/actor/zero_params': actor_gs['zero_grad_params'],
-                'grads/actor/nan_inf': actor_gs['nan_inf_grads'],
+                    'grads/actor/mean': actor_gs['agg']['grad_norm/mean'],
+                    'grads/actor/zero_params': actor_gs['zero_grad_params'],
+                    'grads/actor/nan_inf': actor_gs['nan_inf_grads'],
 
-                'grads/critic/mean': critic_gs['agg']['grad_norm/mean'],
-                'grads/critic/zero_params': critic_gs['zero_grad_params'],
-                'grads/critic/nan_inf': critic_gs['nan_inf_grads'],
+                    'grads/critic/mean': critic_gs['agg']['grad_norm/mean'],
+                    'grads/critic/zero_params': critic_gs['zero_grad_params'],
+                    'grads/critic/nan_inf': critic_gs['nan_inf_grads'],
 
-                'weight_norm/actor/mean': actor_gs['agg']['weight_norm/mean'],
-                'weight_norm/critic/mean': critic_gs['agg']['weight_norm/mean'],
-            })
+                    'weight_norm/actor/mean': actor_gs['agg']['weight_norm/mean'],
+                    'weight_norm/critic/mean': critic_gs['agg']['weight_norm/mean'],
+                })
 
         # Evaluate and save model every 5000 batches
         if batch_idx % 5000 == 0 or batch_idx == config.nb_train_batches:
@@ -319,8 +323,9 @@ def train_nlns(actor, critic, run_id, config):
             runtime = (datetime.datetime.now() - start_time)
             logging.info(
                 f"Validation (Batch {batch_idx}) Costs: {mean_costs:.3f} ({incumbent_costs:.3f}) Runtime: {runtime}")
-    # end wandb logging
-    wandb.finish()
+    if config.wandb:
+        # end wandb logging
+        wandb.finish()
     return incumbent_model_path
 
 
