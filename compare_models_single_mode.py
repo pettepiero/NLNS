@@ -77,6 +77,7 @@ ap.add_argument('--mode', type=str, default='read_dir', choices=['read_dir', 're
 ap.add_argument('--path', '-p', type=Path, required=True, help="Path of data dir or pkl file")
 #ap.add_argument('--data_folder', '-f', type=Path, help="Folder containing instances to test models on", required=True)
 ap.add_argument('--nlns_max_time_per_instance', type=int, default=30, help="Maximum solve time per instance by NLNS model. Default 30s")
+ap.add_argument('--darp_max_time_per_instance', type=int, default=30, help="Maximum solve time per instance by darp model. Default 30s")
 ap.add_argument('--pyvrp_max_time_per_instance', type=int, default=30, help="Maximum solve time per instance by PyVRP model. Default 30s")
 ap.add_argument('--max_num_instances', '-n', type=int, default=None, help="Maximum number of instances to solve. Default: all in the directory.")
 ap.add_argument('--nlns_model', type=str, default=None, help="NLNS model to test. Provide run number, e.g. 'run_17.9.2025_16354', or full model path if --full_model_path is set to true. See list_trained_models.csv for a list of trained NLNS models.", required=True)
@@ -120,13 +121,38 @@ elif args.mode == 'read_pkl':
     raise NotImplementedError
     pkl_file, num_instances = read_pkl(args.path, args.max_num_instances)
 
+darp_output_path = os.path.join(output_path, f"darp_results_{run_id}.txt")
+print(f"\n ************************************************** \n")
+print(f"EXECUTING dial-a-ride ALNS...")
+# Run DARP
+cmd_darp = [
+    "python3",              "/home/pettena/dial-a-ride/cmdvrp.py",
+    "--mode",               "batch",
+    "--problem_type",       "mdvrp",
+    "--dir",                args.path,
+    "--stop_criterion",     "runtime",
+    "--max_time",           str(args.darp_max_time_per_instance),
+    "--output_path",        darp_output_path,
+]
+logging.debug(f"Calling DARP (cmdvrp) with this command:")
+logging.debug(cmd_darp)
+subprocess.run(cmd_darp, check=True)
+print(f"... Done\n")
+
+print(f"\n ************************************************** \n")
+print(f"EXECUTING NLNS models...")
 # Run NLNS
 if not args.full_model_path:
-    model_path = Path('./runs/') / args.nlns_model / 'models'
-    models = list(model_path.glob("model_incumbent*.pt"))
-    assert len(models) <= 1, f"Too many possible models found. Use full model specification"
-    assert len(models) > 0, f"Did not find any models in {model_path}"
-    full_model_path = models[0]
+    if args.nlns_model == 'trained_models/cmdvrp/MD_8/':
+        full_model_path = Path(args.nlns_model)
+        logging.debug(f"Using models in folder {args.nlns_model}")
+    else:
+        logging.debug(f"Trying to get model from path: {args.nlns_model}")
+        model_path = Path('./runs/') / args.nlns_model / 'models'
+        models = list(model_path.glob("model_incumbent*.pt"))
+        assert len(models) <= 1, f"Too many possible models found. Use full model specification"
+        assert len(models) > 0, f"Did not find any models in {model_path}"
+        full_model_path = models[0]
 else:
     assert os.path.exists(args.full_model_path), f"Error: full model path {args.full_model_path} not found"
     full_model_path = args.nlns_model
@@ -160,9 +186,12 @@ logging.debug(f"NLNS command: {cmd_nlns}")
 subprocess.run(cmd_nlns, check=True)
 
 logging.debug(f"Written NLNS objective traces to {models_dir}/objective_trace_inst_INST_NUM.mdvrp.csv")
+print(f"... Done\n")
 
 logging.debug(f"\n*****************************************************")
 
+print(f"\n ************************************************** \n")
+print(f"EXECUTING PyVRP models...")
 # first check if results are already available
 pyvrp_filepath = f'pyvrp_runs/{args.path}_{args.pyvrp_max_time_per_instance}.csv'
 # if available, read those directly
@@ -187,7 +216,17 @@ if not found_pyvrp_file:
     
     subprocess.run(cmd_pyvrp, check=True)
 
+print(f"... Done\n")
+print(f"************************************************")
+print(f"Summarizing metrics:")
 #summarize metrics
+darp_costs = []
+with open(darp_output_path, 'r') as f:
+    darp_costs = f.read().splitlines()
+    darp_costs = darp_costs[1:]
+darp_costs = [
+    f"{idx}, {round(float(cost))}" for idx, _, cost, _ in (item.split(",") for item in darp_costs)
+    ]
 nlns_costs = []
 nlns_filepath = os.path.join(output_path, "search", "nlns_batch_search_results.txt")
 with open(nlns_filepath, 'r') as f:
@@ -201,15 +240,27 @@ if not found_pyvrp_file:
     pyvrp_filepath = os.path.join(output_path, "search", "pyvrp_eval_batch.txt")
 with open(pyvrp_filepath, 'r') as f:
     pyvrp_costs = f.read().splitlines()
-    print(f"pyvrp_costs: {pyvrp_costs}")
-    print(f"nlns_costs: {nlns_costs}")
     assert len(pyvrp_costs) == len(nlns_costs)
+    assert len(darp_costs) == len(nlns_costs)
 
+logging.debug(f"Saved darp costs to: {darp_output_path}")
 logging.debug(f"Saved NLNS costs to: {nlns_filepath}")
 logging.debug(f"Saved PyVRP costs to: {pyvrp_filepath}")
 
+darp_costs_gap = [
+    (float(darp) - float(pyvrp))/float(pyvrp)
+    for (_, darp), (_, pyvrp) in zip(
+        (item.split(",") for item in darp_costs),
+        (item.split(",") for item in pyvrp_costs)
+    )
+]
+
+avg_darp_costs_gap = sum(darp_costs_gap) / len(darp_costs_gap)
+
+logging.debug(f"\n\nAverage darp costs gap: {avg_darp_costs_gap}")
+
 #costs_gap = (nlns_costs - pyvrp_costs)/pyvrp_costs
-costs_gap = [
+nlns_costs_gap = [
     (float(nlns) - float(pyvrp))/float(pyvrp)
     for (_, nlns), (_, pyvrp) in zip(
         (item.split(",") for item in nlns_costs),
@@ -217,8 +268,8 @@ costs_gap = [
     )
 ]
 
-avg_costs_gap = sum(costs_gap) / len(costs_gap)
+avg_nlns_costs_gap = sum(nlns_costs_gap) / len(nlns_costs_gap)
 
-logging.debug(f"\n\nAverage costs gap: {avg_costs_gap}")
+logging.debug(f"\n\nAverage NLNS costs gap: {avg_nlns_costs_gap}")
 
 print(f"Saved log of execution to {log_filename}")
