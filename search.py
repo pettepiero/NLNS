@@ -4,6 +4,7 @@ import os
 import time
 import torch
 import search_single
+import tempfile 
 from vrp.data_utils import read_instances_pkl, read_instance, mdvrp_to_plot_solution
 import glob
 import search_batch
@@ -82,6 +83,14 @@ def evaluate_single_search(config, model_path, instance_path):
     assert model_path is not None, 'No model path given'
     assert instance_path is not None, 'No instance path given'
 
+    # if instance_path has VEHICLES: INF -> Remove this line
+    with tempfile.NamedTemporaryFile("w", delete=False) as tmp:
+        with open(instance_path, "r") as infile:
+            for line in infile:
+                if line.strip() != "VEHICLES : INF":
+                    tmp.write(line)
+    os.replace(tmp.name, instance_path)
+
     instance_names, instance_ids, costs, durations = [], [], [], []
     logging.info("### Single instance search ###")
 
@@ -94,7 +103,6 @@ def evaluate_single_search(config, model_path, instance_path):
     elif os.path.isdir(instance_path):
         instance_files_path = [os.path.join(instance_path, f) for f in os.listdir(instance_path)]
         logging.info("Starting solving all instances in directory")
-        print(f"Found {len(instance_files_path)} instances in directory")
     else:
         raise Exception("Unknown instance file format.")
 
@@ -121,6 +129,7 @@ def evaluate_single_search(config, model_path, instance_path):
 
     if config.plot_solution:
         sol = mdvrp_to_plot_solution(final_instance)
+        print(f"DEBUG: reading instance: {instance_path}")
         data = pyvrp_read(instance_path) 
         plot_solution(sol, data, plot_clients=True)
 
