@@ -18,6 +18,12 @@ from vrp.mdvrp_problem import MDVRPInstance
 import os
 from typing import Union
 from tqdm import tqdm
+import logging
+from vrp.logger import setup_logging
+
+setup_logging(log_file="logs/pyvrp.log", level=logging.DEBUG, to_console=False)
+
+log = logging.getLogger(__name__)
 
 def eval_single(args):
     data = read_instance(args.instance_path)
@@ -40,15 +46,17 @@ def run_pyvrp_on_instance(inst: MDVRPInstance, only_cost: bool = False, display:
     """
     Runs PyVRP on instance. Returns only cost is only_cost is True, otherwise returns Result.
     """
+    log.info(f'In run_pyvrp_on_instance | instance: {inst}')
     m = Model()
     num_depots = len(inst['depot'])
+    log.info(f'In run_pyvrp_on_instance | num_depots: {num_depots}')
     depots = []
     for d in inst['depot']:
         depot = m.add_depot(x=inst['node_coord'][d][0], y=inst['node_coord'][d][1])
         depots.append(depot)
+    log.info(f'In run_pyvrp_on_instance | depots: {depots}')
     
-    if str(inst['vehicles']) != 'inf':
-        print(f"DEBUG: read inst['vehicles'] : {inst['vehicles']}, type: {type(inst['vehicles'])}")
+    if 'vehicles' in list(inst.keys()) and str(inst['vehicles']) != 'inf':
         keys, counts = np.unique(inst['vehicles_depot'], return_counts=True)
         keys = keys - 1
         keys = keys.tolist()
@@ -58,6 +66,7 @@ def run_pyvrp_on_instance(inst: MDVRPInstance, only_cost: bool = False, display:
         depot_num_vehicles = {}
         for i, d in enumerate(inst['depot']):
             depot_num_vehicles[i] = inst['dimension'] - num_depots
+    log.info(f'In run_pyvrp_on_instance | depot_num_vehicles: {depot_num_vehicles}')
     
     for i, d in enumerate(inst['depot']):
         m.add_vehicle_type(
@@ -92,22 +101,24 @@ def run_pyvrp_on_instance(inst: MDVRPInstance, only_cost: bool = False, display:
 
 def read_instances(dir_path: Path) -> list:
     list_of_files = os.listdir(dir_path)
+    log.info(f'list_of_files: {list_of_files}')
     cwd = os.getcwd()
     instances = []
     for inst in list_of_files:
         data_path = os.path.join(cwd, dir_path, inst)
-        if os.path.splitext(data_path)[1] != '.mdvrp':
+        if os.path.splitext(data_path)[1] != '.mdvrp' and os.path.splitext(data_path)[1] != '.vrp':
             continue
         data = read_instance(data_path)
         instances.append(data)
-
     return instances
 
 
 def eval_batch(args):
+    log.info('Passed batch path: {args.dir_path}')
     instances = read_instances(args.dir_path)
+    log.info(f'Read instances: {instances}')
     results = [] 
-    for i, inst in tqdm(enumerate(instances)):
+    for i, inst in enumerate(tqdm(instances)):
         cost = run_pyvrp_on_instance(
                 inst        = inst,
                 only_cost   = True,
@@ -163,13 +174,15 @@ if __name__ == '__main__':
         help="Plot instance solution.",
     )
     args = parser.parse_args()
-    
+    log.info('In pyvrp_model.py')    
     if args.mode == 'eval_batch':
+        log.info('Chose eval_batch mode')
         assert args.dir_path is not None, f"Missing argument dir_path in 'eval_batch' mode"
         assert args.output_dir is not None, f"Missing argument output_dir in 'eval_batch' mode"
 
         eval_batch(args)
     
     elif args.mode == 'eval_single':
+        log.info('Chose eval_single mode')
         assert args.instance_path is not None, f"Missing argument instance_path in 'eval_single' mode"
         eval_single(args)

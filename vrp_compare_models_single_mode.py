@@ -17,17 +17,17 @@ def check_valid_dir(directory: Path) -> bool:
     assert os.path.exists(directory), f"Provided path {directory} doesn't exist"
     assert os.path.isdir(directory), f"Provided path {directory} is not a folder"
     inst_list = os.listdir(directory)
-    inst_list = [ins for ins in inst_list if os.path.splitext(ins)[1] == '.mdvrp']
-    assert len(inst_list) > 0, f"Provided path {len(inst_list)} doesn't contain files with '.mdvrp' extension."
+    inst_list = [ins for ins in inst_list if os.path.splitext(ins)[1] == '.vrp']
+    assert len(inst_list) > 0, f"Provided path {len(inst_list)} doesn't contain files with '.vrp' extension."
 
     return len(inst_list) > 0
 
 def get_dir_filenames(directory: Path) -> list:
     if check_valid_dir(directory):
         inst_list = os.listdir(directory)
-        inst_list = [ins for ins in inst_list if os.path.splitext(ins)[1] == '.mdvrp']
-        assert len(inst_list) > 0, f"Provided path {len(inst_list)} doesn't contain files with '.mdvrp' extension."
-        logging.debug(f"DEBUG: Provided path contains {len(inst_list)} files with '.mdvrp' extension.")
+        inst_list = [ins for ins in inst_list if os.path.splitext(ins)[1] == '.vrp']
+        assert len(inst_list) > 0, f"Provided path {len(inst_list)} doesn't contain files with '.vrp' extension."
+        logging.debug(f"DEBUG: Provided path contains {len(inst_list)} files with '.vrp' extension.")
         return inst_list
     else:
         raise ValueError
@@ -133,24 +133,24 @@ elif args.mode == 'read_pkl':
     raise NotImplementedError
     pkl_file, num_instances = read_pkl(args.path, args.max_num_instances)
 
-darp_output_path = os.path.join(output_path, f"darp_results_{run_id}.txt")
-print(f"\n ************************************************** \n")
-print(f"EXECUTING dial-a-ride ALNS...")
-# Run DARP
-cmd_darp = [
-    "python3",              "/home/pettena/dial-a-ride/cmdvrp.py",
-    "--mode",               "batch",
-    "--problem_type",       "mdvrp",
-    "--dir",                args.path,
-    "--stop_criterion",     "runtime",
-    "--max_time",           str(args.darp_max_time_per_instance),
-    "--output_path",        darp_output_path,
-]
-logging.debug(f"Calling DARP (cmdvrp) with this command:")
-logging.debug(cmd_darp)
-subprocess.run(cmd_darp, check=True)
-print(f"... Done\n")
-
+#darp_output_path = os.path.join(output_path, f"darp_results_{run_id}.txt")
+#print(f"\n ************************************************** \n")
+#print(f"EXECUTING dial-a-ride ALNS...")
+## Run DARP
+#cmd_darp = [
+#    "python3",              "/home/pettena/dial-a-ride/cmdvrp.py",
+#    "--mode",               "batch",
+#    "--problem_type",       "mdvrp",
+#    "--dir",                args.path,
+#    "--stop_criterion",     "runtime",
+#    "--max_time",           str(args.darp_max_time_per_instance),
+#    "--output_path",        darp_output_path,
+#]
+#logging.debug(f"Calling DARP (cmdvrp) with this command:")
+#logging.debug(cmd_darp)
+#subprocess.run(cmd_darp, check=True)
+#print(f"... Done\n")
+#
 print(f"\n ************************************************** \n")
 print(f"EXECUTING NLNS models...")
 # Run NLNS
@@ -183,7 +183,7 @@ cmd_nlns = [
     "--instance_path",      args.path,
     "--lns_batch_size",     "2",
     "--lns_timelimit",      str(args.nlns_max_time_per_instance),
-    "--problem_type",       "mdvrp",
+    "--problem_type",       "vrp",
     "--device",             args.device,
     "--output_path",        output_path,
     "--lns_t_max",          str(args.lns_t_max),
@@ -235,12 +235,12 @@ print(f"************************************************")
 print(f"Summarizing metrics:")
 #summarize metrics
 darp_costs = []
-with open(darp_output_path, 'r') as f:
-    darp_costs = f.read().splitlines()
-    darp_costs = darp_costs[1:]
-darp_costs = [
-    f"{idx}, {round(float(cost))}" for idx, _, cost, _ in (item.split(",") for item in darp_costs)
-    ]
+#with open(darp_output_path, 'r') as f:
+#    darp_costs = f.read().splitlines()
+#    darp_costs = darp_costs[1:]
+#darp_costs = [
+#    f"{idx}, {round(float(cost))}" for idx, _, cost, _ in (item.split(",") for item in darp_costs)
+#    ]
 nlns_costs = []
 nlns_filepath = os.path.join(output_path, "search", "nlns_batch_search_results.txt")
 with open(nlns_filepath, 'r') as f:
@@ -255,27 +255,27 @@ if not found_pyvrp_file:
 with open(pyvrp_filepath, 'r') as f:
     pyvrp_costs = f.read().splitlines()
     assert len(pyvrp_costs) == len(nlns_costs)
-    assert len(darp_costs) == len(nlns_costs)
+    #assert len(darp_costs) == len(nlns_costs)
 
-logging.debug(f"Saved darp costs to: {darp_output_path}")
+#logging.debug(f"Saved darp costs to: {darp_output_path}")
 logging.debug(f"Saved NLNS costs to: {nlns_filepath}")
 logging.debug(f"Saved PyVRP costs to: {pyvrp_filepath}")
-print(f"Saved darp costs to: {darp_output_path}")
+#print(f"Saved darp costs to: {darp_output_path}")
 print(f"Saved NLNS costs to: {nlns_filepath}")
 print(f"Saved PyVRP costs to: {pyvrp_filepath}")
 
-darp_costs_gap = [
-    (float(darp) - float(pyvrp))/float(pyvrp)
-    for (_, darp), (_, pyvrp) in zip(
-        (item.split(",") for item in darp_costs),
-        (item.split(",") for item in pyvrp_costs)
-    )
-]
+#darp_costs_gap = [
+#    (float(darp) - float(pyvrp))/float(pyvrp)
+#    for (_, darp), (_, pyvrp) in zip(
+#        (item.split(",") for item in darp_costs),
+#        (item.split(",") for item in pyvrp_costs)
+#    )
+#]
 
-avg_darp_costs_gap = sum(darp_costs_gap) / len(darp_costs_gap)
-
-logging.debug(f"\n\nAverage darp costs gap: {avg_darp_costs_gap}")
-print(f"\n\nAverage darp costs gap: {avg_darp_costs_gap}")
+#avg_darp_costs_gap = sum(darp_costs_gap) / len(darp_costs_gap)
+#
+#logging.debug(f"\n\nAverage darp costs gap: {avg_darp_costs_gap}")
+#print(f"\n\nAverage darp costs gap: {avg_darp_costs_gap}")
 
 #costs_gap = (nlns_costs - pyvrp_costs)/pyvrp_costs
 nlns_costs_gap = [
