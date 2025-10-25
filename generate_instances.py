@@ -72,8 +72,14 @@ def write_mdvrplib(filename, config, name="problem", convention='mine'):
         f.write("EOF\n")
         print(f"Written data to file: {filename}")
 
-def write_vrplib(filename, loc, demand, capacity, grid_size, name="problem"):
+def write_vrplib(filename, loc, demand, capacity, grid_size, name="problem", convention='mine'):
     assert grid_size == 1000 or grid_size == 1000000
+    if convention == 'mine':
+        shift = 0
+    else:
+        shift = 1
+
+    depot_indices = [1]
 
     with open(filename, 'w+') as f:
         f.write("\n".join([
@@ -82,8 +88,10 @@ def write_vrplib(filename, loc, demand, capacity, grid_size, name="problem"):
                 ("NAME", name),
                 ("TYPE", "CVRP"),
                 ("DIMENSION", len(loc)),
+                ("CAPACITY", capacity),
+                ("NUM_DEPOTS", 1),
                 ("EDGE_WEIGHT_TYPE", "EUC_2D"),
-                ("CAPACITY", capacity)
+                ("VEHICLES", 'INF'),
             )
         ]))
         f.write("\n")
@@ -101,7 +109,7 @@ def write_vrplib(filename, loc, demand, capacity, grid_size, name="problem"):
         f.write("\n")
         f.write("DEPOT_SECTION\n")
         f.write("1\n")
-        f.write("-1\n")
+#        f.write("-1\n")
         f.write("EOF\n")
 
 

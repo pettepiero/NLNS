@@ -83,22 +83,24 @@ def initialize_folders(run_id: int):
 
 sweep_configuration = {
     'method': 'random', 
-    'metric': {'goal': 'minimize', 'name': 'score'},
+    'metric': {'goal': 'minimize', 'name': 'gap'},
     'parameters': {
         # fixed params 
         'mode': {'value': 'read_dir'},
         'path': {'value': 'test_subdataset4'},
-        'nlns_max_time_per_instance': {'value': '60'}, 
+        'nlns_max_time_per_instance': {'value': '120'}, 
         'pyvrp_max_time_per_instance': {'value': '30'}, 
         'max_num_instances': {'value': None},
         'full_model_path': {'value': False},
         'device': {'value': 'cuda'},
          #variable params
-        'nlns_model': {'values': ['run_13.10.2025_81584', 'run_14.10.2025_64337']},
+        #'nlns_model': {'values': ['run_13.10.2025_81584', 'run_14.10.2025_64337']},
+        'nlns_model': {'value': 'trained_models/cmdvrp/MD_8/'},
         'lns_t_max': {'min': 100, 'max': 10000},
         'lns_t_min': {'min': 1, 'max': 100},
-        'lns_reheating_nb': {'min': 1, 'max': 20},
-        'lns_Z_param': {'min': 0, 'max': 1},
+        #'lns_reheating_nb': {'min': 4, 'max': 20},
+        'lns_reheating_nb': {'value': 3},
+        'lns_Z_param': {'min': 0.0, 'max': 1.0},
         'lns_nb_cpus': {'min': 1, 'max': 16},
     }
 }
@@ -132,15 +134,18 @@ def main():
             pkl_file, num_instances = read_pkl(args.path, args.max_num_instances)
         
         # Run NLNS
-        if not args.full_model_path:
-            model_path = Path('./runs/') / args.nlns_model / 'models'
-            models = list(model_path.glob("model_incumbent*.pt"))
-            assert len(models) <= 1, f"Too many possible models found. Use full model specification"
-            assert len(models) > 0, f"Did not find any models in {model_path}"
-            full_model_path = models[0]
+        if Path(args.nlns_model).parents[1] in [Path('trained_models'), Path('/trained_models'), Path('trained_models/'), Path('/trained_models/')]:
+            full_model_path = Path(args.nlns_model)
         else:
-            assert os.path.exists(args.full_model_path), f"Error: full model path {args.full_model_path} not found"
-            full_model_path = args.nlns_model
+            if not args.full_model_path:
+                model_path = Path('./runs/') / args.nlns_model / 'models'
+                models = list(model_path.glob("model_incumbent*.pt"))
+                assert len(models) <= 1, f"Too many possible models found. Use full model specification"
+                assert len(models) > 0, f"Did not find any models in {model_path}"
+                full_model_path = models[0]
+            else:
+                assert os.path.exists(args.full_model_path), f"Error: full model path {args.full_model_path} not found"
+                full_model_path = args.nlns_model
         
         assert os.path.exists(full_model_path), f"Provided model_path doesn't exists"
         
