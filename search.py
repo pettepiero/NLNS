@@ -15,6 +15,7 @@ from tqdm import trange
 from pyvrp.plotting import plot_solution
 from pyvrp import read as pyvrp_read
 from tqdm import tqdm
+from build_pickle import save_traces_to_pickle
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +118,8 @@ def evaluate_single_search(config, model_path, instance_path, run_id=None):
                 instance_ids.append(i)
                 costs.append(cost)
                 durations.append(duration)
-
+    # create pkl dataframe with traces
+    save_traces_to_pickle(project_dir=config.output_path)
     output_path_with_times = os.path.join(config.output_path, "search", 'nlns_batch_search_results_with_times.txt')
     output_path = os.path.join(config.output_path, "search", 'nlns_batch_search_results.txt')
     results_with_times= np.array(list(zip(instance_names, costs, durations)))
