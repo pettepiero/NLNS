@@ -3,3 +3,10 @@ data/
 runs/
 plotter.py
 datasets/
+trained_models/*/objective_trace*.csv
+*.sh
+*.zip
+wandb
+temp
+logs/
+
