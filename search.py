@@ -16,6 +16,8 @@ from pyvrp.plotting import plot_solution
 from pyvrp import read as pyvrp_read
 from tqdm import tqdm
 
+logger = logging.getLogger(__name__)
+
 class LnsOperatorPair:
     def __init__(self, model, destroy_procedure, p_destruction):
         self.model = model
@@ -61,8 +63,8 @@ def load_operator_pairs(path, config):
 def evaluate_batch_search(config, model_path):
     assert model_path is not None, 'No model path given'
 
-    logging.info('### Batch Search ###')
-    logging.info('Starting search')
+    logger.info('### Batch Search ###')
+    logger.info('Starting search')
     start_time = time.time()
 
     results = search_batch.lns_batch_search_mp(config, model_path)
@@ -76,40 +78,41 @@ def evaluate_batch_search(config, model_path):
     path = os.path.join(config.output_path, "search", "nlns_batch_search_results.txt")
     np.savetxt(path, np.column_stack((instance_id, costs)), delimiter=',', fmt=['%i', '%f'])
     print(f"Saved results of batch search in {path}")
-    logging.info(
+    logger.info(
         f"Test set costs: {np.mean(costs):.3f} Total Runtime (s): {runtime:.1f} Iterations: {np.mean(iterations):.1f}")
 
-def evaluate_single_search(config, model_path, instance_path):
+def evaluate_single_search(config, model_path, instance_path, run_id=None):
     assert model_path is not None, 'No model path given'
     assert instance_path is not None, 'No instance path given'
 
     # if instance_path has VEHICLES: INF -> Remove this line
-    with tempfile.NamedTemporaryFile("w", delete=False) as tmp:
-        with open(instance_path, "r") as infile:
-            for line in infile:
-                if line.strip() != "VEHICLES : INF":
-                    tmp.write(line)
-    os.replace(tmp.name, instance_path)
+    if os.path.isfile(instance_path):
+        with tempfile.NamedTemporaryFile("w", delete=False) as tmp:
+            with open(instance_path, "r") as infile:
+                for line in infile:
+                    if line.strip() != "VEHICLES : INF":
+                        tmp.write(line)
+        os.replace(tmp.name, instance_path)
 
     instance_names, instance_ids, costs, durations = [], [], [], []
-    logging.info("### Single instance search ###")
+    logger.info("### Single instance search ###")
 
     if instance_path.endswith(".vrp") or instance_path.endswith(".sd") or instance_path.endswith(".mdvrp"):
-        logging.info("Starting solving a single instance")
+        logger.info("Starting solving a single instance")
         instance_files_path = [instance_path]
     elif instance_path.endswith(".pkl"):
         instance_files_path = [instance_path] * len(read_instances_pkl(instance_path))
-        logging.info("Starting solving a .pkl instance set")
+        logger.info("Starting solving a .pkl instance set")
     elif os.path.isdir(instance_path):
         instance_files_path = [os.path.join(instance_path, f) for f in os.listdir(instance_path)]
-        logging.info("Starting solving all instances in directory")
+        logger.info("Starting solving all instances in directory")
     else:
         raise Exception("Unknown instance file format.")
 
     for i, instance_path in enumerate(tqdm(instance_files_path)):
         if instance_path.endswith(".pkl") or instance_path.endswith(".vrp") or instance_path.endswith(".sd") or instance_path.endswith(".mdvrp"):
             for jj in range(config.nb_runs):
-                cost, duration, final_instance = search_single.lns_single_search_mp(instance_path, config.lns_timelimit, config, model_path, i)
+                cost, duration, final_instance = search_single.lns_single_search_mp(instance_path, config.lns_timelimit, config, model_path, i, run_id=run_id, plot_initial_sol=False)
                 instance_names.append(instance_path)
                 instance_ids.append(i)
                 costs.append(cost)
@@ -123,43 +126,42 @@ def evaluate_single_search(config, model_path, instance_path):
     np.savetxt(output_path_with_times, results_with_times, delimiter=',', fmt=['%s', '%s', '%s'], header="name, cost, runtime")
     np.savetxt(output_path, results, delimiter=',',)
 
-    logging.info(
+    logger.info(
         f"NLNS single search evaluation results: Total Nb. Runs: {len(costs)}, "
         f"Mean Costs: {np.mean(costs):.3f} Mean Runtime (s): {np.mean(durations):.1f}")
 
     if config.plot_solution:
         sol = mdvrp_to_plot_solution(final_instance)
-        print(f"DEBUG: reading instance: {instance_path}")
         data = pyvrp_read(instance_path) 
         plot_solution(sol, data, plot_clients=True)
 
     #print on terminal
     tours = final_instance.solution
     tours = [t for t in tours if len(t) > 1]
-    logging.info(f"Solution results\n==============")
-    logging.info(f"\t# routes: {len(tours)}")
-    logging.info(f"\t# clients: {final_instance.nb_customers}")
-    logging.info(f"\t# n_depots: {final_instance.n_depots}")
-    logging.info(f"\t# depot indices: {final_instance.depot_indices}")
-    #logging.info(f"\t# costs: {final_instance.get_costs(True)}")
-    logging.info(f"\t# costs: {final_instance.get_costs()}")
+    logger.info(f"Solution results\n==============")
+    logger.info(f"\t# routes: {len(tours)}")
+    logger.info(f"\t# clients: {final_instance.nb_customers}")
+    logger.info(f"\t# n_depots: {final_instance.n_depots}")
+    logger.info(f"\t# depot indices: {final_instance.depot_indices}")
+    #logger.info(f"\t# costs: {final_instance.get_costs(True)}")
+    logger.info(f"\t# costs: {final_instance.get_costs()}")
 
 def evaluate_multi_depot_search(config, instance_path):
     assert instance_path is not None, "No instance path given"
     assert instance_path.endswith(".mdvrp"), "Wrong instance type (doesn't end with '.mdvrp')"
 
     instance_names, costs, durations = [], [], []
-    logging.info("### Single instance search for multi depot case###")
+    logger.info("### Single instance search for multi depot case###")
 
     if instance_path.endswith(".mdvrp"):
-        logging.info("Starting solving a single instance")
+        logger.info("Starting solving a single instance")
         instance_files_path = [instance_path]
     #elif instance_path.endswith(".pkl"):
     #    instance_files_path = [instance_path] * len(read_instances_pkl(instance_path))
-    #    logging.info("Starting solving a .pkl instance set")
+    #    logger.info("Starting solving a .pkl instance set")
     elif os.path.isdir(instance_path):
         instance_files_path = [os.path.join(instance_path, f) for f in os.listdir(instance_path)]
-        logging.info("Starting solving all instances in directory")
+        logger.info("Starting solving all instances in directory")
     else:
         raise Exception("Unknown instance file format.")
 
@@ -181,6 +183,6 @@ def evaluate_multi_depot_search(config, instance_path):
     results = np.array(list(zip(instance_names, costs, durations)))
     np.savetxt(output_path, results, delimiter=',', fmt=['%s', '%s', '%s'], header="name, cost, runtime")
 
-    logging.info(
+    logger.info(
         f"NLNS single search evaluation results: Total Nb. Runs: {len(costs)}, "
         f"Mean Costs: {np.mean(costs):.3f} Mean Runtime (s): {np.mean(durations):.1f}")

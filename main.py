@@ -26,29 +26,30 @@ import search
 from actor import VrpActorModel
 from critic import VrpCriticModel
 import multiprocessing
-if multiprocessing.get_start_method(allow_none=True) != "spawn":
-    multiprocessing.set_start_method("spawn", force=True)
+#if multiprocessing.get_start_method(allow_none=True) != "spawn":
+#    multiprocessing.set_start_method("spawn", force=True)
 from vrp.data_utils import read_instances_pkl
 import torch
 import re
+from vrp.logger import setup_logging
 
 VERSION = "0.3.0"
 
 if __name__ == '__main__':
     config = config.get_config()
-    run_id = None
-
     if config.output_path == "":
         run_id = np.random.randint(10000, 99999)
     else:
         match = re.search(r"run_\d{1,2}\.\d{1,2}\.\d{4}_(\d+)", config.output_path)
         if match:
             run_id = int(match.group(1))
-            logging.info(f"Matched passed run_id : {run_id}")
         else:
             run_id = np.random.randint(10000, 99999)
-            logging.info(f"Generated run_id : {run_id}")
-
+    filename=os.path.join(os.getcwd(),'logs', str(run_id) + ".log")
+    setup_logging(f"{filename}")
+    print(f"\n\nmain.py is logging to {filename}\n\n")
+    log = logging.getLogger(__name__)
+    log.info(f"run_id: {run_id}")
 
     if config.seed is not None:
         torch.manual_seed(config.seed)
@@ -66,17 +67,17 @@ if __name__ == '__main__':
             os.makedirs(os.path.join(config.output_path, "images"))
 
     # Create logger and log run parameters
-    logging.basicConfig(
-        filename=os.path.join(config.output_path, "log_" + str(run_id) + ".txt"), filemode='w',
-        level=logging.INFO, format='[%(levelname)s]%(message)s')
-    logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
-    logging.info("Started")
-    logging.info("Call: {0}".format(''.join(sys.argv)))
-    logging.info("Version: {0}".format(VERSION))
-    logging.info("PARAMETERS:")
+    #logging.basicConfig(
+    #    filename=os.path.join(config.output_path, "log_" + str(run_id) + ".txt"), filemode='w',
+    #    level=logging.INFO, format='[%(levelname)s]%(message)s')
+    #logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
+    log.info("Started")
+    log.info("Call: {0}".format(''.join(sys.argv)))
+    log.info("Version: {0}".format(VERSION))
+    log.info("PARAMETERS:")
     for arg in sorted(vars(config)):
-        logging.info("{0}: {1}".format(arg, getattr(config, arg)))
-    logging.info("----------")
+        log.info("{0}: {1}".format(arg, getattr(config, arg)))
+    log.info("----------")
 
     if config.DEBUG:
         import colored_traceback
@@ -133,7 +134,7 @@ if __name__ == '__main__':
             raise Exception("Batch mode only supports .pkl instances files.")
         search.evaluate_batch_search(config, config.model_path)
     elif config.mode == "eval_single":
-        search.evaluate_single_search(config, config.model_path, config.instance_path)
+        search.evaluate_single_search(config, config.model_path, config.instance_path, run_id = run_id)
     elif config.mode == "multi_depot":
         search.evaluate_multi_depot_search(config, config.instance_path)
     else:

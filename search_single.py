@@ -1,6 +1,8 @@
-import traceback
+import traceback 
 from multiprocessing import Pool, Manager
-from vrp.data_utils import read_instance
+from vrp.data_utils import read_instance, mdvrp_to_plot_solution
+from pyvrp import read as pyvrp_read
+from pyvrp.plotting import plot_solution
 from copy import deepcopy
 import numpy as np
 import torch
@@ -12,6 +14,9 @@ import queue as pyqueue
 #from plot.plot import plot_instance
 import os
 import csv
+import logging
+
+log = logging.getLogger(__name__)
 
 def lns_single_seach_job(args):
     try:
@@ -24,7 +29,7 @@ def lns_single_seach_job(args):
 
         # Repeat until the process is terminated
         while True:
-            solution, incumbent_cost = queue_jobs.get()
+            solution, incumbent_cost = queue_jobs.get() #block if necessary until an item is available
             incumbent_solution = deepcopy(solution)
             cur_cost = np.inf
             instance.solution = solution
@@ -98,22 +103,56 @@ def lns_single_seach_job(args):
         print("Exception in lns_single_search job: {0}".format(e))
         traceback.print_exc()   
 
+def has_vehicles_line(instance_path: str) -> bool:
+    """
+    Determines wether the instance_path has line 'VEHICLES : INF' or not
+    """
+    lines = []
+    with open(instance_path, 'r') as f:
+        lines = f.readlines() 
+    for line in lines:
+        if line == 'VEHICLES : INF\n':
+            return True
+    return False
 
-def lns_single_search_mp(instance_path, timelimit, config, model_path, pkl_instance_id=None):
+
+def lns_single_search_mp(instance_path, timelimit, config, model_path, pkl_instance_id=None, plot_initial_sol=False, run_id=None):
     instance = read_instance(instance_path, pkl_instance_id)
-    start_time = time.time()
     instance.create_initial_solution()
-    # plot initial instance 
+    if plot_initial_sol:
+        sol = mdvrp_to_plot_solution(instance)
+        # if file has 'VEHICLES : INF' line
+        data, temp_filename = None, None
+        if has_vehicles_line(instance_path):
+            #  create temp file without line
+            temp_filename = f"{instance_path}_temp"
+            # load data from temp file
+            with open(instance_path) as f:
+                lines = f.readlines()
+                lines = [l for l in lines if l != 'VEHICLES : INF\n']
+                with open(temp_filename, "w+") as f1:
+                    f1.writelines(lines)
+            data = pyvrp_read(temp_filename)
+        else: 
+            data = pyvrp_read(instance_path) 
+        #plot solution
+        plot_solution(sol, data, plot_clients=True)
+        # delete temp file
+        if temp_filename is not None:
+            os.remove(temp_filename)
+
     dir_path = os.path.dirname(model_path)
     #plot_instance(instance, f"{dir_path}/initial_snapshot.png")
     #incumbent_costs = instance.get_costs(config.round_distances)
-    incumbent_costs = instance.get_costs()
+    incumbent_costs = instance.get_costs(config.round_distances)
     instance.verify_solution(config)
 
+    start_time = time.time()
     m = Manager()
     queue_jobs = m.Queue()
     queue_results = m.Queue()
     pool = Pool(processes=config.lns_nb_cpus)
+    log.debug(f"Simulated Annealing reheating iteration duration: {config.lns_timelimit/config.lns_reheating_nb}")
     pool.map_async(lns_single_seach_job,
                    [(i, config, instance_path, model_path, queue_jobs, queue_results, pkl_instance_id) for i in
                     range(config.lns_nb_cpus)])
@@ -126,12 +165,8 @@ def lns_single_search_mp(instance_path, timelimit, config, model_path, pkl_insta
         queue_jobs.put([instance.solution, incumbent_costs])
     
     while time.time() - start_time < timelimit:
-        try:
-            result = queue_results.get(timeout=0.2)
-        except pyqueue.Empty:
-            continue
         # Receive the incumbent solution from a finished search process (reheating iteration finished)
-        #result = queue_results.get()
+        result = queue_results.get()
         if result != 0:
             cost = result[1]
             objective_trace.append((time.time() - start_time, float(cost)))
@@ -143,19 +178,29 @@ def lns_single_search_mp(instance_path, timelimit, config, model_path, pkl_insta
     pool.terminate()
     duration = time.time() - start_time
     instance.verify_solution(config)
-
+    log.info("Final solution:")
+    for el in instance.solution:
+        log.info(el)
+    log.info("\n")
 
     trace_path = os.path.join(dir_path, f"objective_trace_{os.path.basename(instance_path).replace(os.sep, '_')}.csv")
+    print(f"Printed objective trace to: {trace_path}")
+    log.info(f"Printed objective trace to: {trace_path}")
     with open(trace_path, "w", newline="") as f:
         w = csv.writer(f)
         w.writerow(["time_sec", "incumbent_cost"])
         w.writerows(objective_trace)
+    # save copy of objective trace to config.output_path
+    copy_of_trace_path = os.path.join(config.output_path, f"objective_trace_{os.path.basename(instance_path).replace(os.sep, '_')}.csv")
+    with open(copy_of_trace_path, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["time_sec", "incumbent_cost"])
+        w.writerows(objective_trace)
+    log.info(f"Printed objective trace to: {copy_of_trace_path}")
 
     # plot final instance 
     #plot_path = f"{dir_path}/final_snapshot.png"
     ##plot_instance(instance, plot_path)
     #print(f"Plotted result to {plot_path}")
     #return instance.get_costs(config.round_distances), duration, instance
-    return instance.get_costs(), duration, instance
-
-
+    return instance.get_costs(config.round_distances), duration, instance
