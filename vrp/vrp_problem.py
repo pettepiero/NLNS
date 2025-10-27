@@ -1,5 +1,8 @@
 import numpy as np
 import torch
+import logging
+
+log = logging.getLogger(__name__)
 
 class VRPInstance():
     def __init__(self, nb_customers, locations, original_locations, demand, capacity, use_cost_memory=True):
@@ -24,6 +27,8 @@ class VRPInstance():
             self.costs_memory = np.full((nb_customers + 1, nb_customers + 1), np.nan, dtype="float")
         else:
             self.costs_memory = None
+        self.n_depots = 1
+        self.depot_indices = [1]
 
     def get_n_closest_locations_to(self, origin_location_id, mask, n):
         """Return the idx of the n closest locations sorted by distance."""
@@ -50,7 +55,7 @@ class VRPInstance():
                 cur_load = self.capacity
         self.solution[-1].append([0, 0, 0])
 
-    def get_costs_memory(self, round):
+    def get_costs_memory(self, round=False):
         """Return the cost of the current complete solution. Uses a memory to improve performance."""
         c = 0
         for t in self.solution:
@@ -70,7 +75,7 @@ class VRPInstance():
                     c += self.costs_memory[from_idx, to_idx]
         return c
 
-    def get_costs(self, round):
+    def get_costs(self, round=False):
         """Return the cost of the current complete solution."""
         c = 0
         for t in self.solution:
@@ -84,7 +89,7 @@ class VRPInstance():
                 c += cc
         return c
 
-    def get_costs_incomplete(self, round):
+    def get_costs_incomplete(self, round=False):
         """Return the cost of the current incomplete solution."""
         c = 0
         for tour in self.solution:
@@ -146,17 +151,17 @@ class VRPInstance():
                                                    replace=False)
         self.destroy(customers_to_remove_idx)
 
-    def destroy_point_based(self, p):
+    def destroy_point_based(self, p, rng=None):
         """Point based destroy. Select customers that should be removed based on their distance to a random point
-         and remove them from tours."""
+         and remove them from tours. rng argument for compatibility with NLNS for multi depot"""
         nb_customers_to_remove = int(self.nb_customers * p)
         random_point = np.random.rand(1, 2)
         dist = np.sum((self.locations[1:] - random_point) ** 2, axis=1)
         closest_customers_idx = np.argsort(dist)[:nb_customers_to_remove] + 1
         self.destroy(closest_customers_idx)
 
-    def destroy_tour_based(self, p):
-        """Tour based destroy. Remove all tours closest to a randomly selected point from a solution."""
+    def destroy_tour_based(self, p, rng=None):
+        """Tour based destroy. Remove all tours closest to a randomly selected point from a solution. rng argument for compatibility with NLNS for multi depot"""
 
         # Make a dictionary that maps customers to tours
         customer_to_tour = {}
@@ -458,7 +463,8 @@ def get_mask(origin_nn_input_idx, dynamic_input, instances, config, capacity):
     batch_size = origin_nn_input_idx.shape[0]
 
     # Start with all used input positions
-    mask = (dynamic_input[:, :, 1] != 0).cpu().long().numpy()
+    #mask = (dynamic_input[:, :, 1] != 0).cpu().long().numpy()
+    mask = (dynamic_input[:, :, 1] != 0).clone()
 
     for i in range(batch_size):
         idx_from = origin_nn_input_idx[i]
@@ -472,12 +478,14 @@ def get_mask(origin_nn_input_idx, dynamic_input, instances, config, capacity):
         else:
             idx_same_tour = origin_tour[0][2]
 
-        mask[i, idx_same_tour] = 0
+        #mask[i, idx_same_tour] = 0
+        mask[i, idx_same_tour] = False 
 
         # Do not allow origin location = destination location
-        mask[i, idx_from] = 0
+#        mask[i, idx_from] = 0
+        mask[i, idx_from] = False 
 
-    mask = torch.from_numpy(mask)
+    #mask = torch.from_numpy(mask)
 
     origin_tour_demands = dynamic_input[torch.arange(batch_size), origin_nn_input_idx, 0]
     combined_demand = origin_tour_demands.unsqueeze(1).expand(batch_size, dynamic_input.shape[1]) + dynamic_input[:, :,
@@ -489,13 +497,17 @@ def get_mask(origin_nn_input_idx, dynamic_input, instances, config, capacity):
 
         # If the origin tour consists of multiple customers mask all tours with multiple customers where
         # the combined demand is > 1
-        mask[multiple_customer_tour & (combined_demand > capacity) & (dynamic_input[:, :, 1] > 1)] = 0
+#        mask[multiple_customer_tour & (combined_demand > capacity) & (dynamic_input[:, :, 1] > 1)] = 0
+        mask[multiple_customer_tour & (combined_demand > capacity) & (dynamic_input[:, :, 1] > 1)] = False 
 
         # If the origin tour consists of a single customer mask all tours with demand is >= 1
-        mask[(~multiple_customer_tour) & (dynamic_input[:, :, 0] >= capacity)] = 0
+        #mask[(~multiple_customer_tour) & (dynamic_input[:, :, 0] >= capacity)] = 0
+        mask[(~multiple_customer_tour) & (dynamic_input[:, :, 0] >= capacity)] = False 
     else:
-        mask[combined_demand > capacity] = 0
+        #mask[combined_demand > capacity] = 0
+        mask[combined_demand > capacity] = False 
 
-    mask[:, 0] = 1  # Always allow to go to the depot
+    #mask[:, 0] = 1  # Always allow to go to the depot
+    mask[:, 0] = True # Always allow to go to the depot
 
     return mask

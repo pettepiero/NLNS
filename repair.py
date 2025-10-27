@@ -7,6 +7,9 @@ from vrp import mdvrp_problem
 import torch.nn.functional as F
 from copy import deepcopy
 import argparse
+import logging
+
+logger = logging.getLogger(__name__)
 
 def get_depot_mask(batch_size: int, n_points: int, config: argparse.Namespace, instances: list) -> torch.Tensor:
     """
@@ -58,7 +61,8 @@ def _actor_model_forward(actor, instances, static_input, dynamic_input, config, 
         if config.problem_type == 'mdvrp':
             mask = mdvrp_problem.get_mask(origin_idx, dynamic_input, instances, config, vehicle_capacity).to(config.device)
         elif config.problem_type == 'vrp':
-            mask = vrp_problem.get_mask(origin_idx, dynamic_input, instances, config, vehicle_capacity).to(config.device).float()
+            #mask = vrp_problem.get_mask(origin_idx, dynamic_input, instances, config, vehicle_capacity).to(config.device).float()
+            mask = vrp_problem.get_mask(origin_idx, dynamic_input, instances, config, vehicle_capacity).to(config.device)
         else:
             raise ValueError(
                 f"Problem in config.problem_type: expected either 'mdvrp' or 'vrp', got {config.problem_type}."

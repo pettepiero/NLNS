@@ -251,7 +251,13 @@ def read_instance(path, pkl_instance_idx=0):
     elif path.endswith('.sd'):
         return read_instance_sd(path)
     elif path.endswith('.pkl'):
-        return read_instances_pkl(path, pkl_instance_idx, 1)[0]
+        data = read_instances_pkl(path, pkl_instance_idx, 1)
+        if isinstance(data, list):
+            return data[0]
+        elif isinstance(data, (VRPInstance, MDVRPInstance)):
+            return data
+        else:
+            raise Exception("Unknown instance file type.")
     else:
         raise Exception("Unknown instance file type.")
 
@@ -407,10 +413,12 @@ def read_instance_sd(path):
 #    return instances
 
 def read_instances_pkl(path, offset=0, num_samples=None) -> list:
-
+    data = None
     with open(path, 'rb') as f:
         data = pickle.load(f)
 
+    if isinstance(data, (VRPInstance, MDVRPInstance)):
+        return data
     if data and isinstance(data[0], (VRPInstance, MDVRPInstance)):
         return data[offset:offset + (num_samples or len(data))]
 
@@ -543,19 +551,24 @@ def _write_vrp_instance(path, inst):
     dim = coords.shape[0]
     cap = int(inst.capacity)
 
+    num_depots = 1
     with open(path, "w") as f:
         name = os.path.splitext(os.path.basename(path))[0]
         f.write(f"NAME : {name}\n")
         f.write("TYPE : CVRP\n")
         f.write(f"DIMENSION : {dim}\n")
         f.write(f"CAPACITY : {cap}\n")
+        f.write(f"NUM_DEPOTS : {num_depots}\n")
         f.write(f"EDGE_WEIGHT_TYPE: EUC_2D\n")
+        f.write(f"VEHICLES : INF\n")
         f.write("NODE_COORD_SECTION\n")
         for i, (x, y) in enumerate(coords):
-            f.write(f"{i} {int(x)} {int(y)}\n")
+            f.write(f"{i+1} {int(x)} {int(y)}\n")
         f.write("DEMAND_SECTION\n")
         for i, d in enumerate(demand):
-            f.write(f"{i} {int(d)}\n")
+            f.write(f"{i+1} {int(d)}\n")
+        f.write("DEPOT_SECTION\n")
+        f.write(f"1\n")
         f.write("EOF\n")
 
 def _write_mdvrp_instance(path, inst, inf_vehicles=False):
@@ -566,10 +579,6 @@ def _write_mdvrp_instance(path, inst, inf_vehicles=False):
 
     depot_indices = list(map(int, inst.depot_indices))
     num_depots = len(depot_indices)
-    if min(depot_indices) == 0:
-        shift = 1
-    else:
-        shift = 0
 
     with open(path, "w") as f:
         name = os.path.splitext(os.path.basename(path))[0]
@@ -589,7 +598,6 @@ def _write_mdvrp_instance(path, inst, inf_vehicles=False):
             f.write(f"{i+1} {int(d)}\n")
         f.write("DEPOT_SECTION\n")
         for row_id, dep_idx in enumerate(depot_indices):
-            #f.write(f"{row_id + 1} {dep_idx + shift}\n")
             f.write(f"{row_id + 1}\n")
         f.write("EOF\n")
 

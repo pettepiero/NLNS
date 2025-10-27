@@ -10,7 +10,7 @@ import datetime
 from search_batch import lns_batch_search
 import repair
 import main
-from vrp.data_utils import create_dataset, save_dataset_pkl, read_instances_pkl, save_dataset_vrplib, read_instance_mdvrp
+from vrp.data_utils import create_dataset, save_dataset_pkl, read_instances_pkl, save_dataset_vrplib, read_instance_mdvrp, read_instance_vrp
 from search import LnsOperatorPair
 from tqdm import tqdm, trange
 from pathlib import Path
@@ -154,7 +154,7 @@ def train_nlns(actor, critic, run_id, config):
         # save costs of initial solutions to scale rewards later on
         init_costs = np.ndarray(len(training_set))
         for i, instance in enumerate(training_set):
-            init_costs[i] = instance.get_costs()
+            init_costs[i] = instance.get_costs(False)
 
     actor_optim = optim.Adam(actor.parameters(), lr=config.actor_lr)
     actor.train()
@@ -267,6 +267,8 @@ def train_nlns(actor, critic, run_id, config):
                     'train/reward': float(mean_reward), 
                     'train/actor_loss': float(mean_loss), 
                     'train/critic_loss': float(mean_critic_loss),
+                    'train/train_cost_batch': float(train_cost_batch),
+                    'train/val_cost_snapshot': float(val_cost_snapshot),
                     'adv/mean': float(advantage.mean()),
                     'adv/std': float(advantage.std()),
                     'adv/abs_mean': float(advantage.abs().mean()),

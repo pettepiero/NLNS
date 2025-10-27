@@ -160,18 +160,32 @@ if not args.full_model_path:
         logging.debug(f"Using models in folder {args.nlns_model}")
     else:
         logging.debug(f"Trying to get model from path: {args.nlns_model}")
-        model_path = Path('./runs/') / args.nlns_model / 'models'
-        models = list(model_path.glob("model_incumbent*.pt"))
-        assert len(models) <= 1, f"Too many possible models found. Use full model specification"
-        assert len(models) > 0, f"Did not find any models in {model_path}"
-        full_model_path = models[0]
+# if exists, as is:
+        if os.path.exists(args.nlns_model):
+        # if file -> single model
+            if os.path.isfile(args.nlns_model):
+                full_model_path = Path(args.nlns_model)
+                models_dir = full_model_path.parent
+            # else -> models folder
+            elif os.path.isdir(args.nlns_model):
+                full_model_path = Path(args.nlns_model)
+                models_dir = full_model_path
+            else:
+                raise ValueError
+        else: # try adding 'runs' and 'models' 
+            model_path = Path('./runs/') / args.nlns_model / 'models'
+            models = list(model_path.glob("model_incumbent*.pt"))
+            assert len(models) <= 1, f"Too many possible models found. Use full model specification"
+            assert len(models) > 0, f"Did not find any models in {model_path}"
+            full_model_path = models[0]
+            models_dir = full_model_path.parent
 else:
     assert os.path.exists(args.full_model_path), f"Error: full model path {args.full_model_path} not found"
     full_model_path = args.nlns_model
+    models_dir = full_model_path.parent
 
 assert os.path.exists(full_model_path), f"Provided model_path doesn't exists"
 
-models_dir = full_model_path.parent
 
 logging.debug(f"\n**********************************************\nCalling NLNS model to run on batch:\n")
 # execute NLNS batch eval
@@ -210,6 +224,7 @@ print(f"EXECUTING PyVRP models...")
 pyvrp_filepath = f'pyvrp_runs/{args.path}_{args.pyvrp_max_time_per_instance}.csv'
 # if available, read those directly
 found_pyvrp_file = False
+logging.debug(f"Looking for already solved instances in: {pyvrp_filepath}")
 if os.path.isfile(pyvrp_filepath):
     found_pyvrp_file = True
     logging.debug(f"Found already solved instances: {pyvrp_filepath}")

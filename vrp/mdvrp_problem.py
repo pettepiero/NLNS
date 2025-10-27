@@ -223,8 +223,8 @@ class MDVRPInstance():
                     c += self.costs_memory[from_idx, to_idx]
         return c
 
-    def get_costs(self):
-        """Return the cost of the current complete solution."""
+    def get_costs(self, round=False):
+        """Return the cost of the current complete solution. 'round' argument left for compatibility with original code"""
         c = 0
         for t in self.solution:
             if t[0][0] not in self.depot_indices or t[-1][0] not in self.depot_indices:
@@ -235,8 +235,8 @@ class MDVRPInstance():
                 c += cc
         return c
 
-    def get_costs_incomplete(self):
-        """Return the cost of the current incomplete solution."""
+    def get_costs_incomplete(self, round=False):
+        """Return the cost of the current incomplete solution. 'round' argument left for compatibility with original code"""
         c = 0
         for tour in self.solution:
             if len(tour) <= 1:
@@ -315,7 +315,7 @@ class MDVRPInstance():
         """Tour based destroy. Remove all tours closest to a randomly selected point from a solution."""
         # Make a dictionary that maps customers to tours
         customer_to_tour = {}
-        for i, tour in enumerate(self.solution[1:]):
+        for i, tour in enumerate(self.solution[self.n_depots:]):
             for e in tour[1:-1]:
                 if e[0] in customer_to_tour:
                     customer_to_tour[e[0]].append(i + 1)
@@ -327,8 +327,8 @@ class MDVRPInstance():
         tours_to_remove_idx = []
         #random_point = np.random.rand(1, 2)  # Randomly selected point
         random_point = rng.random((1,2))
-        dist = np.sum((self.locations[1:] - random_point) ** 2, axis=1)
-        closest_customers_idx = np.argsort(dist) + 1
+        dist = np.sum((self.locations[self.n_depots:] - random_point) ** 2, axis=1)
+        closest_customers_idx = np.argsort(dist) + self.n_depots 
 
         # Iterate over customers starting with the customer closest to the random point.
         for customer_idx in closest_customers_idx:

@@ -15,6 +15,7 @@ import queue as pyqueue
 import os
 import csv
 import logging
+import pickle
 
 log = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ def lns_single_seach_job(args):
         instance = read_instance(instance_path, pkl_instance_id)
 
         T_min = config.lns_t_min
+        outer_loop_idx = 0
 
         # Repeat until the process is terminated
         while True:
@@ -42,6 +44,7 @@ def lns_single_seach_job(args):
             iter = -1
             # Repeat until the time limit of one reheating iteration is reached
             while time.time() - start_time_reheating < config.lns_timelimit / config.lns_reheating_nb:
+                log.debug(f"outer_loop_idx: {outer_loop_idx} | iter: {iter}")
                 iter += 1
 
                 # Set the first config.lns_Z_param percent of the instances/solutions in the batch
@@ -55,6 +58,8 @@ def lns_single_seach_job(args):
                 destroy_procedure = operator_pairs[selected_operator_pair_id].destroy_procedure
                 p_destruction = operator_pairs[selected_operator_pair_id].p_destruction
 
+                log.debug(f"selected_operator_pair_id: {selected_operator_pair_id} -> actor: {actor} | destroy_procedure: {destroy_procedure} | p_destruction: {p_destruction}")
+
                 # Destroy instances
                 search.destroy_instances(
                     rng                 = rng,
@@ -62,6 +67,12 @@ def lns_single_seach_job(args):
                     destroy_procedure   = destroy_procedure,
                     destruction_p       = p_destruction
                     )
+
+                #save pkl of destroyed instance 0
+                pkl_id = f"{config.output_path}/instance_0_{outer_loop_idx}_{iter}_0.pkl"
+                with open(pkl_id, 'wb+') as f:
+                    pickle.dump(instance_copies[0], f)
+                log.info(f"Saved instance[0] after destroy op to {pkl_id}")
 
                 # Repair instances
                 for i in range(int(len(instance_copies) / config.lns_batch_size)):
@@ -72,6 +83,12 @@ def lns_single_seach_job(args):
                             config      = config,
                             rng=rng,
                             )
+
+                #save pkl of repaired instance 0
+                pkl_id = f"{config.output_path}/instance_0_{outer_loop_idx}_{iter}_1.pkl"
+                with open(pkl_id, 'wb+') as f:
+                    pickle.dump(instance_copies[0], f)
+                log.info(f"Saved instance[0] after destroy op to {pkl_id}")
 
                 costs = [inst.get_costs_memory(config.round_distances) for inst in instance_copies]
                 # Calculate the T_max and T_factor values for simulated annealing in the first iteration
@@ -146,6 +163,8 @@ def lns_single_search_mp(instance_path, timelimit, config, model_path, pkl_insta
     #incumbent_costs = instance.get_costs(config.round_distances)
     incumbent_costs = instance.get_costs(config.round_distances)
     instance.verify_solution(config)
+    
+    log.info(f"instance_path: {instance_path}")
 
     start_time = time.time()
     m = Manager()
