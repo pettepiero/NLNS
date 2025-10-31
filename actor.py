@@ -79,6 +79,7 @@ class VrpActorModel(nn.Module):
         super(VrpActorModel, self).__init__()
 
         self.all_embed = Encoder(4, hidden_size)
+        self.depot_embed = Encoder(4, hidden_size)
         self.pointer = Pointer(device, hidden_size)
         self.origin_embed = Encoder(4, hidden_size)
 
@@ -91,17 +92,22 @@ class VrpActorModel(nn.Module):
         # customers are all but depots
         is_customer = ~depot_mask
         is_active = dynamic_input_float[:, :, 1] > 0
-
         keep = depot_mask | (is_customer & is_active)
         keep3 = keep.unsqueeze(2).float()
         static_input = static_input * keep3
 
-        #active_inputs = dynamic_input_float[:, 1:, 1] > 0
-        #static_input[:, 1:, :] = static_input[:, 1:, :] * active_inputs.unsqueeze(2).float()
+        node_features = torch.cat((static_input, dynamic_input_float), dim=2)
+        cust_features = node_features * (~depot_mask).unsqueeze(2).float()
+        depot_features = node_features * (depot_mask).unsqueeze(2).float()
 
+        cust_hidden = self.all_embed(cust_features)
+        depot_hidden = self.depot_embed(depot_features)
+
+        all_hidden = cust_hidden + depot_hidden
+        
         # Embed inputs
-        all_hidden = self.all_embed.forward(
-            torch.cat((static_input, dynamic_input_float), dim=2))
+        #all_hidden = self.all_embed.forward(
+        #    torch.cat((static_input, dynamic_input_float), dim=2))
         origin_hidden = self.origin_embed.forward(
             torch.cat((origin_static_input.unsqueeze(1), origin_dynamic_input_float.unsqueeze(1)), dim=2))
 
