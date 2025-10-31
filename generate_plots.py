@@ -6,6 +6,8 @@ import os
 from pathlib import Path
 import argparse
 from search_single import has_vehicles_line
+import logging
+from tqdm import tqdm
 
 def load_instance(pkl_path: Path):
     with open(pkl_path, "rb") as f:
@@ -25,6 +27,7 @@ def has_vehicles_line(instance_path: str) -> bool:
     return False
 
 def main():
+    logging.basicConfig(filename='generate_plot.log', level=logging.DEBUG)
     parser = argparse.ArgumentParser(description="Plot evolution of instances")
 
     parser.add_argument('--dir', type=str, required=True)
@@ -35,8 +38,11 @@ def main():
     instances_list = os.listdir(args.dir)   
     assert len(instances_list) > 0
     
-    instances_list = sorted(Path(args.dir).glob('instance_0_*.pkl'))
+    instances_list = sorted(Path(args.dir).glob('instance_*.pkl'))
     instances_list = [str(el) for el in instances_list]
+    logging.debug(f"instances_list:")
+    logging.debug(f"{instances_list}")
+
     
     # read file with problem data
     # if file has 'VEHICLES : INF' line
@@ -54,7 +60,7 @@ def main():
     else: 
         data = pyvrp_read(args.instance_path) 
 
-    for ins in instances_list:
+    for ins in tqdm(instances_list):
         instance = read_instance(ins, 0)
         sol = mdvrp_to_plot_solution(instance)
         ins_path = Path(ins)
@@ -62,8 +68,6 @@ def main():
 
     if temp_filename is not None:
         os.remove(temp_filename)
-
-
 
 if __name__ == '__main__':
     main() 

@@ -200,14 +200,17 @@ def train_nlns(actor, critic, run_id, config):
         
         unscaled_costs_repaired = deepcopy(costs_repaired)
             #scale costs
-        if config.scale_rewards:
-            batch_init_costs = [deepcopy(cost) for cost in init_costs[training_set_batch_idx*batch_size: (training_set_batch_idx +1)*batch_size]]
-            costs_repaired = np.array(costs_repaired) / np.array(batch_init_costs)
-            costs_destroyed = np.array(costs_destroyed) / np.array(batch_init_costs) 
+        #if config.scale_rewards:
+        #    batch_init_costs = [deepcopy(cost) for cost in init_costs[training_set_batch_idx*batch_size: (training_set_batch_idx +1)*batch_size]]
+        #    costs_repaired = np.array(costs_repaired) / np.array(batch_init_costs)
+        #    costs_destroyed = np.array(costs_destroyed) / np.array(batch_init_costs) 
 
         # Reward/Advantage computation
         reward = np.array(costs_repaired) - np.array(costs_destroyed) #per instance
-        reward = 100*reward
+
+        if config.scale_rewards:
+            reward = reward / np.array(costs_destroyed)
+
         reward = torch.from_numpy(reward).float().to(config.device)
         advantage = reward - critic_est # per instance
 

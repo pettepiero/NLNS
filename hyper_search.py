@@ -87,19 +87,18 @@ sweep_configuration = {
     'parameters': {
         # fixed params 
         'mode': {'value': 'read_dir'},
-        'path': {'value': 'test_subdataset4'},
-        'nlns_max_time_per_instance': {'value': '120'}, 
+        'path': {'value': 'test_subdataset5'},
+        'nlns_max_time_per_instance': {'value': '90'}, 
         'pyvrp_max_time_per_instance': {'value': '30'}, 
         'max_num_instances': {'value': None},
         'full_model_path': {'value': False},
         'device': {'value': 'cuda'},
          #variable params
         #'nlns_model': {'values': ['run_13.10.2025_81584', 'run_14.10.2025_64337']},
-        'nlns_model': {'value': 'trained_models/cmdvrp/MD_8/'},
+        'nlns_model': {'value': 'trained_models/cmdvrp/MD_2/batch2500_2/'},
         'lns_t_max': {'min': 100, 'max': 10000},
         'lns_t_min': {'min': 1, 'max': 100},
-        #'lns_reheating_nb': {'min': 4, 'max': 20},
-        'lns_reheating_nb': {'value': 3},
+        'lns_reheating_nb': {'min': 1, 'max': 20},
         'lns_Z_param': {'min': 0.0, 'max': 1.0},
         'lns_nb_cpus': {'min': 1, 'max': 16},
     }
@@ -137,7 +136,9 @@ def main():
         if Path(args.nlns_model).parents[1] in [Path('trained_models'), Path('/trained_models'), Path('trained_models/'), Path('/trained_models/')]:
             full_model_path = Path(args.nlns_model)
         else:
-            if not args.full_model_path:
+            if args.nlns_model == 'trained_models/cmdvrp/MD_2/batch2500_2/':
+                full_model_path = Path(args.nlns_model)
+            elif not args.full_model_path:
                 model_path = Path('./runs/') / args.nlns_model / 'models'
                 models = list(model_path.glob("model_incumbent*.pt"))
                 assert len(models) <= 1, f"Too many possible models found. Use full model specification"
@@ -159,7 +160,7 @@ def main():
             "--mode",               "eval_single",
             "--model_path",         full_model_path,
             "--instance_path",      args.path,
-            "--lns_batch_size",     "2",
+            "--lns_batch_size",     "1000",
             "--lns_timelimit",      str(args.nlns_max_time_per_instance),
             "--problem_type",       "mdvrp",
             "--device",             args.device,
@@ -243,5 +244,5 @@ def main():
 
 
 if __name__ == '__main__':
-    sweep_id = wandb.sweep(sweep=sweep_configuration, project='hyperparams_search')
+    sweep_id = wandb.sweep(sweep=sweep_configuration, project='hyperparams_search_MD_2')
     wandb.agent(sweep_id, function=main, count=10)

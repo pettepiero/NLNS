@@ -210,7 +210,7 @@ cmd_nlns = [
     "--mode",               "eval_single",
     "--model_path",         full_model_path,
     "--instance_path",      args.path,
-    "--lns_batch_size",     "2",
+    "--lns_batch_size",     "1000",
     "--lns_timelimit",      str(args.nlns_max_time_per_instance),
     "--problem_type",       "mdvrp",
     "--device",             args.device,

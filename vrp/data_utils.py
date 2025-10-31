@@ -703,16 +703,19 @@ def mdvrp_to_plot_solution(inst) -> PlotSolution:
     assert inst.solution is not None, "Instance has no solution to plot."
 
     routes: List[PlotRoute] = []
-    depot_set = set(inst.depot_indices)
+    if isinstance(inst, MDVRPInstance):
+        depot_set = set(inst.depot_indices)
+    elif isinstance(inst, VRPInstance):
+        depot_set = set([0])
 
     for tour in inst.solution:
         # Skip depot placeholders or incomplete tours
         if len(tour) < 3:
             continue
         start, end = tour[0][0], tour[-1][0]
-        if start not in depot_set or end not in depot_set:
-            # Incomplete: skip (or handle specially if you want to visualize partial routes)
-            continue
+        #if start not in depot_set or end not in depot_set:
+        #    # Incomplete: skip (or handle specially if you want to visualize partial routes)
+        #    continue
 
         # Middle of the tour should be only clients; still filter out any accidental depots
         visits = [node for (node, _, _) in tour[1:-1] if node not in depot_set]

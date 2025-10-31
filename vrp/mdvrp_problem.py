@@ -1,7 +1,9 @@
 import numpy as np
 import torch
+import logging
 # Based on vrp_problem.py
 
+log = logging.getLogger(__name__)
 class MDVRPInstance():
     """ 
     Generalization of VRPInstance to MD case.
@@ -111,6 +113,16 @@ class MDVRPInstance():
         # drop 0 if inserted
         nearest_masked_order = np.argsort(dists)[:take]   # positions within idxs
         return idxs[nearest_masked_order]                 # original indices into self.locations
+    
+    def get_n_planned_customers(self):
+        counter = 0
+        for tour in self.solution:
+            if tour:
+                if tour[0][0] in self.depot_indices or tour[-1][0] in self.depot_indices:
+                    for node in tour:
+                        if node[0] not in self.depot_indices:
+                            counter += 1
+        return counter
     
     
     def get_nearest_depot(self, loc):
@@ -300,15 +312,21 @@ class MDVRPInstance():
     def destroy_point_based(self, p, rng, point=None):
         """Point based destroy. Select customers that should be removed based on their distance to a random point
          and remove them from tours."""
+
+        assert 0.0 <= p <= 1.0, "p must be in [0, 1]"   
         nb_customers_to_remove = int(self.nb_customers * p)
+        #log.info(f"In destroy_point_based -> removing {nb_customers_to_remove} customers out of {self.nb_customers} customers in current sol")
         if point is None:
             random_point = rng.random((1,2))
+        #    log.info(f"Generating random point: {random_point}")
         else:
             random_point = point
+        #    log.info(f"Passed random point: {random_point}")
         customer_locations = self.locations[self.customer_indices]
         #dist = np.sum((self.locations[1:] - random_point) ** 2, axis=1) 
         dist = np.sum((customer_locations - random_point) ** 2, axis=1) #squared euclidian distance
         closest_customers_idx = np.argsort(dist)[:nb_customers_to_remove] + self.n_depots 
+        #log.info(f"Destroying closest_customers_idx: {closest_customers_idx}")
         self.destroy(closest_customers_idx)
 
     def destroy_tour_based(self, p, rng):
@@ -318,10 +336,16 @@ class MDVRPInstance():
         for i, tour in enumerate(self.solution[self.n_depots:]):
             for e in tour[1:-1]:
                 if e[0] in customer_to_tour:
-                    customer_to_tour[e[0]].append(i + 1)
+                    #customer_to_tour[e[0]].append(i + 1)
+                    customer_to_tour[e[0]].append(i + self.n_depots)
                 else:
-                    customer_to_tour[e[0]] = [i + 1]
+                    #customer_to_tour[e[0]] = [i + 1]
+                    customer_to_tour[e[0]] = [i + self.n_depots]
 
+        #log.info(f"customer_to_tour: {customer_to_tour}")
+        #log.info(f"self.solution:")
+        #for el in self.solution:
+        #    log.info(el)
         nb_customers_to_remove = int(self.nb_customers * p)  # Number of customer that should be removed
         nb_removed_customers = 0
         tours_to_remove_idx = []
@@ -341,7 +365,7 @@ class MDVRPInstance():
                     nb_removed_customers += len(self.solution[i])
 
             # Stop once enough tours are marked for removal
-            if nb_removed_customers >= nb_customers_to_remove and len(tours_to_remove_idx) > 1:
+            if nb_removed_customers >= nb_customers_to_remove and len(tours_to_remove_idx) >= 1:
                 break
 
         # Create the new tours that all consist of only a single customer
