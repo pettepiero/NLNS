@@ -184,6 +184,13 @@ def train_nlns(actor, critic, run_id, config):
     
     if config.wandb:
         wandb.watch(actor, log='all', log_freq=log_f)
+        wandb.log({
+            'single_instance/cost0': float(training_set[0].get_costs(config.round_distances)),
+            'single_instance/cost1': float(training_set[1].get_costs(config.round_distances)),
+            'single_instance/cost2': float(training_set[2].get_costs(config.round_distances)),
+            'single_instance/cost3': float(training_set[3].get_costs(config.round_distances)),
+            'single_instance/cost4': float(training_set[4].get_costs(config.round_distances)),
+        })
     
     for batch_idx in trange(1, config.nb_train_batches + 1):
     #for batch_idx in range(1, config.nb_train_batches + 1):

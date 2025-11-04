@@ -25,6 +25,11 @@ def lns_single_seach_job(args):
         rng = np.random.default_rng(id)
         operator_pairs = search.load_operator_pairs(model_path, config)
         instance = read_instance(instance_path, pkl_instance_id)
+        
+        # debug stats
+        stats = {}
+        stats['iteration_counter'] = 0
+        stats['acceptance_ratio'] = []
 
         T_min = config.lns_t_min
         outer_loop_idx = 0
@@ -44,7 +49,7 @@ def lns_single_seach_job(args):
             iter = -1
             # Repeat until the time limit of one reheating iteration is reached
             while time.time() - start_time_reheating < config.lns_timelimit / config.lns_reheating_nb:
-                log.debug(f"outer_loop_idx: {outer_loop_idx} | iter: {iter}")
+                log.info(f"outer_loop_idx: {outer_loop_idx} | iter: {iter}")
                 iter += 1
 
                 # Set the first config.lns_Z_param percent of the instances/solutions in the batch
@@ -58,7 +63,7 @@ def lns_single_seach_job(args):
                 destroy_procedure = operator_pairs[selected_operator_pair_id].destroy_procedure
                 p_destruction = operator_pairs[selected_operator_pair_id].p_destruction
 
-                log.debug(f"selected_operator_pair_id: {selected_operator_pair_id} -> actor: {actor} | destroy_procedure: {destroy_procedure} | p_destruction: {p_destruction}")
+                #log.info(f"selected_operator_pair_id: {selected_operator_pair_id} -> actor: {actor} | destroy_procedure: {destroy_procedure} | p_destruction: {p_destruction}")
 
                 # Destroy instances
                 search.destroy_instances(
@@ -67,12 +72,15 @@ def lns_single_seach_job(args):
                     destroy_procedure   = destroy_procedure,
                     destruction_p       = p_destruction
                     )
-
+                log.info(f"destroyed costs: {[inst.get_costs_incomplete() for inst in instance_copies[:2]]}")
                 #save pkl of destroyed instance 0
-                pkl_id = f"{config.output_path}/instance_0_{outer_loop_idx}_{iter}_0.pkl"
-                with open(pkl_id, 'wb+') as f:
-                    pickle.dump(instance_copies[0], f)
-                log.info(f"Saved instance[0] after destroy op to {pkl_id}")
+                #pkl_id = f"{config.output_path}/instance_{config.lns_batch_size -1}_{outer_loop_idx}_{iter}_0.pkl"
+                #with open(pkl_id, 'wb+') as f:
+                #    pickle.dump(instance_copies[-1], f)
+                #log.info(f"Saved solution of instance[{config.lns_batch_size-1}] ({instance_path}) after destroy op {destroy_procedure} to {pkl_id}")
+                #n_custs = instance_copies[-1].nb_customers
+                #planned_custs = instance_copies[-1].get_n_planned_customers()
+                #log.info(f"Now there are {planned_custs} customers in solution and {n_custs - planned_custs} unassigned customers")
 
                 # Repair instances
                 for i in range(int(len(instance_copies) / config.lns_batch_size)):
@@ -84,18 +92,32 @@ def lns_single_seach_job(args):
                             rng=rng,
                             )
 
+                log.info(f"repaired costs: {[inst.get_costs() for inst in instance_copies[:2]]}")
+
                 #save pkl of repaired instance 0
-                pkl_id = f"{config.output_path}/instance_0_{outer_loop_idx}_{iter}_1.pkl"
-                with open(pkl_id, 'wb+') as f:
-                    pickle.dump(instance_copies[0], f)
-                log.info(f"Saved instance[0] after destroy op to {pkl_id}")
+                #pkl_id = f"{config.output_path}/instance_{config.lns_batch_size -1}_{outer_loop_idx}_{iter}_1.pkl"
+                #with open(pkl_id, 'wb+') as f:
+                #    pickle.dump(instance_copies[-1], f)
+                ##log.info(f"Saved solution of instance[{config.lns_batch_size -1}] ({instance_path}) after repair op to {pkl_id}")
+                #n_custs = instance_copies[-1].nb_customers
+                #planned_custs = instance_copies[-1].get_n_planned_customers()
+                #log.info(f"Now there are {planned_custs} customers in solution and {n_custs - planned_custs} unassigned customers")
 
                 costs = [inst.get_costs_memory(config.round_distances) for inst in instance_copies]
+
+                #compute the fraction of repairs that improve the cost
+                stats['fraction_less_cost_inc'] = sum([c < incumbent_cost for c in costs]) / len(costs)
+
                 # Calculate the T_max and T_factor values for simulated annealing in the first iteration
                 if iter == 0:
+                    log.info(f"iter {iter} | computing the q75 and 125 of costs")
                     q75, q25 = np.percentile(costs, [75, 25])
+                    log.info(f"q75: {q75}")
+                    log.info(f"q25: {q25}")
                     T_max = q75 - q25
+                    log.info(f"T_max: {T_max}")
                     T_factor = -math.log(T_max / T_min)
+                    log.info(f"T_factor: {T_factor}")
 
                 min_costs = min(costs)
                 #print(f"DEBUG: job {id} -> min_costs: {min_costs}")
@@ -109,16 +131,30 @@ def lns_single_seach_job(args):
                 T = T_max * math.exp(
                     T_factor * (time.time() - start_time_reheating) / (config.lns_timelimit / config.lns_reheating_nb))
 
+                log.info(f"Updated T = {T}")
+
                 # Accept a solution if the acceptance criteria is fulfilled
                 if min_costs <= cur_cost or np.random.rand() < math.exp(-(min(costs) - cur_cost) / T):
+                    #log.info(f"Accepted current solution with min_costs = {min_costs} -> updating instance.solution and cur_cost")
                     instance.solution = instance_copies[np.argmin(costs)].solution
                     cur_cost = min_costs
 
+
+                log.info(f'Done acceptance test')
+                log.info(f"passed time: {time.time() - start_time_reheating}")
+                log.info(f"available time: {config.lns_timelimit / config.lns_reheating_nb}")
+                #else:
+                    #log.info(f"Not accepted current solution with min_costs = {min_costs} as new solution")
+            #log.info(f"Putting results in queue_results:")
+            #log.info([incumbent_solution, incumbent_cost])
+
             queue_results.put([incumbent_solution, incumbent_cost])
+            outer_loop_idx = outer_loop_idx +1
 
     except Exception as e:
         print("Exception in lns_single_search job: {0}".format(e))
         traceback.print_exc()   
+    
 
 def has_vehicles_line(instance_path: str) -> bool:
     """
@@ -171,7 +207,7 @@ def lns_single_search_mp(instance_path, timelimit, config, model_path, pkl_insta
     queue_jobs = m.Queue()
     queue_results = m.Queue()
     pool = Pool(processes=config.lns_nb_cpus)
-    log.debug(f"Simulated Annealing reheating iteration duration: {config.lns_timelimit/config.lns_reheating_nb}")
+    log.info(f"Simulated Annealing reheating iteration duration: {config.lns_timelimit/config.lns_reheating_nb}")
     pool.map_async(lns_single_seach_job,
                    [(i, config, instance_path, model_path, queue_jobs, queue_results, pkl_instance_id) for i in
                     range(config.lns_nb_cpus)])

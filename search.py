@@ -28,14 +28,27 @@ class LnsOperatorPair:
         return f"Destroy_procedure: {self.destroy_procedure} | P_destruction: {self.p_destruction}"
 
 
-def destroy_instances(rng, instances, destroy_procedure=None, destruction_p=None):
-    for instance in instances:
-        if destroy_procedure == "R":
-            instance.destroy_random(destruction_p, rng=rng)
-        elif destroy_procedure == "P":
-            instance.destroy_point_based(destruction_p, rng=rng)
-        elif destroy_procedure == "T":
-            instance.destroy_tour_based(destruction_p, rng=rng)
+def destroy_instances(rng, instances, destroy_procedure=None, destruction_p=None, debug=False):
+    if debug == False:
+        for instance in instances:
+            if destroy_procedure == "R":
+                instance.destroy_random(destruction_p, rng=rng)
+            elif destroy_procedure == "P":
+                instance.destroy_point_based(destruction_p, rng=rng)
+            elif destroy_procedure == "T":
+                instance.destroy_tour_based(destruction_p, rng=rng)
+    else:
+        for instance in instances:
+            if destroy_procedure == "R":
+                logger.info("In destroy_instances, calling destroy_random")
+                instance.destroy_random(destruction_p, rng=rng, debug=True)
+            elif destroy_procedure == "P":
+                logger.info("In destroy_instances, calling destroy_point_based")
+                instance.destroy_point_based(destruction_p, rng=rng, debug=True)
+            elif destroy_procedure == "T":
+                logger.info("In destroy_instances, calling destroy_tour_based")
+                instance.destroy_tour_based(destruction_p, rng=rng, debug=True)
+
 
 
 def load_operator_pairs(path, config):
