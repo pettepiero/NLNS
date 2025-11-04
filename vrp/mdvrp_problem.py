@@ -34,9 +34,15 @@ class MDVRPInstance():
         List of indices of inputs that have not been visited
     incomplete_tours: list
         List of incomplete tours of self.solution
+    closest_depots: np.ndarray
+        List of closest depots for each customer
+    dist_coeff: float
+        Coefficient for distance component of cost of a solution
+    ndm_coeff: float
+        Coefficient for NDM component of cost of a solution
     """
     
-    def __init__(self, depot_indices, locations, original_locations, demand, capacity, use_cost_memory=True):
+    def __init__(self, depot_indices, locations, original_locations, demand, capacity, dist_coeff=None, ndm_coeff=None, use_cost_memory=True):
         self.nb_customers = len(locations)-len(depot_indices)
         assert self.nb_customers > 0, f"Error in nb_customers"
         self.depot_indices = depot_indices
@@ -68,6 +74,17 @@ class MDVRPInstance():
                 [[dep_idx, 0, d]] for d, dep_idx in enumerate(self.depot_indices)
                 ]
 
+        self.closest_depots = np.empty(self.nb_customers + self.n_depots, dtype=int)
+        for i in range(len(self.locations)):
+            if i in self.depot_indices:
+                continue
+            self.closest_depots[i] = self.get_nearest_depot(i)
+
+        if dist_coeff is None:
+            self.dist_coeff = 1.0
+        if ndm_coeff is None:
+            self.ndm_coeff = 0.3
+                
 
 
     #def get_n_closest_locations_to(self, origin_location_id, mask, n):
@@ -117,16 +134,16 @@ class MDVRPInstance():
     def get_n_planned_customers(self):
         counter = 0
         for tour in self.solution:
-            if tour:
-                if tour[0][0] in self.depot_indices or tour[-1][0] in self.depot_indices:
+            if len(tour) > 1:
+                if tour[0][0] in self.depot_indices and tour[-1][0] in self.depot_indices:
                     for node in tour:
                         if node[0] not in self.depot_indices:
                             counter += 1
         return counter
     
     
-    def get_nearest_depot(self, loc):
-        x,y = self.locations[loc]
+    def get_nearest_depot(self, loc_id):
+        x,y = self.locations[loc_id]
         min_dist = np.inf 
         closest_depot = None
         for d in self.depot_indices:
@@ -137,6 +154,16 @@ class MDVRPInstance():
                 closest_depot = d
     
         return closest_depot 
+
+    def get_assigned_depots_list(self):
+        cust_to_depot = np.empty(self.nb_customers+self.n_depots, dtype=int)
+        for r in self.solution:
+            if len(r) > 1:
+                depot = r[0][0] # assumes all routes start (and end) ath depot
+                for c in r[1:-1]: 
+                    cust_to_depot[c[0]] = depot
+        
+        return cust_to_depot 
 
     def create_initial_solution_random(self, rng: np.random.Generator):
         #1 create clusters for each depot
@@ -216,24 +243,36 @@ class MDVRPInstance():
                     cur_load = self.capacity
             self.solution[-1].append([depot, 0, input_idx])
     
-    def get_costs_memory(self, round):
-        """Return the cost of the current complete solution. Uses a memory to improve performance."""
-        c = 0
-        for t in self.solution:
-            #check that first position element of tour t starts at a depot
-            if t[0][0] not in self.depot_indices or t[-1][0] not in self.depot_indices:
-                raise Exception("Incomplete solution.")
-            for i in range(0, len(t) - 1):
-                from_idx = t[i][0] 
-                to_idx = t[i + 1][0]
-                if np.isnan(self.costs_memory[from_idx, to_idx]):
-                    cc = np.sqrt((self.original_locations[from_idx, 0] - self.original_locations[to_idx, 0]) ** 2
-                                 + (self.original_locations[from_idx, 1] - self.original_locations[to_idx, 1]) ** 2)
-                    c += cc
-                    self.costs_memory[from_idx, to_idx] = cc
-                else:
-                    c += self.costs_memory[from_idx, to_idx]
-        return c
+    #def get_costs_memory(self, round):
+    #    """Return the cost of the current complete solution. Uses a memory to improve performance."""
+    #    c = 0
+    #    for t in self.solution:
+    #        #check that first position element of tour t starts at a depot
+    #        if t[0][0] not in self.depot_indices or t[-1][0] not in self.depot_indices:
+    #            raise Exception("Incomplete solution.")
+    #        for i in range(0, len(t) - 1):
+    #            from_idx = t[i][0] 
+    #            to_idx = t[i + 1][0]
+    #            if np.isnan(self.costs_memory[from_idx, to_idx]):
+    #                cc = np.sqrt((self.original_locations[from_idx, 0] - self.original_locations[to_idx, 0]) ** 2
+    #                             + (self.original_locations[from_idx, 1] - self.original_locations[to_idx, 1]) ** 2)
+    #                c += cc
+    #                self.costs_memory[from_idx, to_idx] = cc
+    #            else:
+    #                c += self.costs_memory[from_idx, to_idx]
+    #    return c
+
+
+    def compute_ndm(self, perc=False):
+        """
+        Natural Depot Mismatch is a measure of count or percentage of customers that are not served by their nearest depot.
+        """
+        assigned_depots = np.asarray(self.get_assigned_depots_list())
+        closest_depots = np.asarray(self.closest_depots)
+        ndm = sum(assigned_depots == closest_depots).item()
+        if perc:
+            ndm = ndm/(self.nb_customers+self.n_depots)
+        return ndm 
 
     def get_costs(self, round=False):
         """Return the cost of the current complete solution. 'round' argument left for compatibility with original code"""
@@ -244,6 +283,8 @@ class MDVRPInstance():
             for i in range(0, len(t) - 1):
                 cc = np.sqrt((self.original_locations[t[i][0], 0] - self.original_locations[t[i + 1][0], 0]) ** 2
                              + (self.original_locations[t[i][0], 1] - self.original_locations[t[i + 1][0], 1]) ** 2)
+                if round:
+                    cc = np.round(cc)
                 c += cc
         return c
 
@@ -257,6 +298,8 @@ class MDVRPInstance():
                 cc = np.sqrt((self.original_locations[tour[i][0], 0] - self.original_locations[tour[i + 1][0], 0]) ** 2
                              + (self.original_locations[tour[i][0], 1] - self.original_locations[
                     tour[i + 1][0], 1]) ** 2)
+                if round:
+                    cc = np.round(cc)
                 c += cc
         return c
 
@@ -301,15 +344,18 @@ class MDVRPInstance():
 
         self.solution = st
 
-    def destroy_random(self, p, rng):
+    def destroy_random(self, p, rng, debug=False):
         """Random destroy. Select customers that should be removed at random and remove them from tours."""
         customers_to_remove_idx = rng.choice(range(1, self.nb_customers + 1), int(self.nb_customers * p), replace=True)
                 #a=self.customer_indices,
                 #size=int(self.nb_customers * p), # degree of destruction
                 #replace=False)
+        if debug:
+            log.info(f"In destroy_random: removing customers indices: {customers_to_remove_idx}")
+            log.info(f"removing {len(customers_to_remove_idx)} customers")
         self.destroy(customers_to_remove_idx)
 
-    def destroy_point_based(self, p, rng, point=None):
+    def destroy_point_based(self, p, rng, point=None, debug=False):
         """Point based destroy. Select customers that should be removed based on their distance to a random point
          and remove them from tours."""
 
@@ -326,7 +372,9 @@ class MDVRPInstance():
         #dist = np.sum((self.locations[1:] - random_point) ** 2, axis=1) 
         dist = np.sum((customer_locations - random_point) ** 2, axis=1) #squared euclidian distance
         closest_customers_idx = np.argsort(dist)[:nb_customers_to_remove] + self.n_depots 
-        #log.info(f"Destroying closest_customers_idx: {closest_customers_idx}")
+        if debug:
+            log.info(f"In destroy_point_based: removing customers indices: {closest_customers_idx}")
+            log.info(f"removing {len(closest_customers_idx)} customers")
         self.destroy(closest_customers_idx)
 
     def destroy_tour_based(self, p, rng):
@@ -353,7 +401,6 @@ class MDVRPInstance():
         random_point = rng.random((1,2))
         dist = np.sum((self.locations[self.n_depots:] - random_point) ** 2, axis=1)
         closest_customers_idx = np.argsort(dist) + self.n_depots 
-
         # Iterate over customers starting with the customer closest to the random point.
         for customer_idx in closest_customers_idx:
             # Iterate over the tours of the customer
@@ -367,6 +414,9 @@ class MDVRPInstance():
             # Stop once enough tours are marked for removal
             if nb_removed_customers >= nb_customers_to_remove and len(tours_to_remove_idx) >= 1:
                 break
+        if debug:
+            log.info(f"In destroy_tour_based: removing tours indices: {tours_to_remove_idx}")
+            log.info(f"removing {len(tours_to_remove_idx)} tours out of {len(self.solution) - self.n_depots} tours (excluding depot tours)")
 
         # Create the new tours that all consist of only a single customer
         new_tours = []

@@ -53,7 +53,6 @@ def train_nlns(actor, critic, run_id, config):
     rng = np.random.default_rng(config.seed)
     batch_size = config.batch_size
 
-
     if config.wandb:
         # wandb logging
         wandb.init(
@@ -64,6 +63,8 @@ def train_nlns(actor, critic, run_id, config):
         )
         wandb.define_metric('batch_idx')
         wandb.define_metric('train/*', step_metric='batch_idx')
+        wandb.define_metric('tour_stats/', step_metric='batch_idx')
+        wandb.define_metric('single_instance/*')
 
     if not config.load_dataset:
         logging.info("Generating training data...")
@@ -193,11 +194,46 @@ def train_nlns(actor, critic, run_id, config):
                         training_set[training_set_batch_idx * batch_size: (training_set_batch_idx + 1) * batch_size]]
 
         # Destroy and repair the set of instances
+        #if config.nb_batches_training_set - 1 <= batch_idx <= config.nb_batches_training_set + 2:
+        #    destroy_instances(rng, tr_instances, config.lns_destruction, config.lns_destruction_p, debug=True)
+        #else:
+        #    destroy_instances(rng, tr_instances, config.lns_destruction, config.lns_destruction_p, debug=False)
         destroy_instances(rng, tr_instances, config.lns_destruction, config.lns_destruction_p)
-        costs_destroyed = [instance.get_costs_incomplete() for instance in tr_instances]
-        tour_indices, tour_logp, critic_est = repair.repair(tr_instances, actor, config, critic, rng)
-        costs_repaired = [instance.get_costs() for instance in tr_instances]
+        costs_destroyed = [instance.get_costs_incomplete(config.round_distances) for instance in tr_instances]
+        avg_num_custs_destroyed = np.mean([instance.get_n_planned_customers() for instance in tr_instances])
+        avg_tour_length_destroyed = np.mean(costs_destroyed)/avg_num_custs_destroyed
+        if config.problem_type == 'mdvrp':
+            avg_ndm_destroyed = np.mean([instance.compute_ndm(perc=True) for instance in tr_instances])
         
+        # debug on instance 0
+        if training_set_batch_idx == 0:
+            wandb.log({
+                'single_instance/cost0': float(costs_destroyed[0]),
+                'single_instance/cost1': float(costs_destroyed[1]),
+                'single_instance/cost2': float(costs_destroyed[2]),
+                'single_instance/cost3': float(costs_destroyed[3]),
+                'single_instance/cost4': float(costs_destroyed[4]),
+            })
+
+        train_batch_destoyed_n_unassigned = [inst.nb_customers - inst.get_n_planned_customers() for inst in tr_instances]
+
+        tour_indices, tour_logp, critic_est = repair.repair(tr_instances, actor, config, critic, rng)
+        costs_repaired = [instance.get_costs(config.round_distances) for instance in tr_instances]
+        avg_num_custs_repaired = np.mean([instance.get_n_planned_customers() for instance in tr_instances])
+        avg_tour_length_repaired = np.mean(costs_repaired)/avg_num_custs_repaired
+        if config.problem_type == 'mdvrp':
+            avg_ndm_repaired = np.mean([instance.compute_ndm(perc=True) for instance in tr_instances])
+
+        # debug on instance 0
+        if training_set_batch_idx == 0:
+            wandb.log({
+                'single_instance/cost0': float(costs_repaired[0]),
+                'single_instance/cost1': float(costs_repaired[1]),
+                'single_instance/cost2': float(costs_repaired[2]),
+                'single_instance/cost3': float(costs_repaired[3]),
+                'single_instance/cost4': float(costs_repaired[4]),
+            })
+         
         unscaled_costs_repaired = deepcopy(costs_repaired)
             #scale costs
         #if config.scale_rewards:
@@ -252,6 +288,7 @@ def train_nlns(actor, critic, run_id, config):
             mean_reward = np.mean(rewards[-log_f:]) #avg reward of last log_f batches
             # cost of this batch (multiple of log_f)
             train_cost_batch = np.mean(unscaled_costs_repaired) # mean repair cost OF THE CURRENT BATCH
+            train_cost_batch_destroyed = np.mean(costs_destroyed) 
             val_cost_snapshot = lns_validation_search(validation_instances, actor, config, rng) # mean lns cost over validation_instances
             #cost_gap = (train_cost_batch - val_cost_snapshot) / val_cost_snapshot if val_cost_snapshot != 0 else 0.0
 
@@ -271,7 +308,13 @@ def train_nlns(actor, critic, run_id, config):
                     'train/actor_loss': float(mean_loss), 
                     'train/critic_loss': float(mean_critic_loss),
                     'train/train_cost_batch': float(train_cost_batch),
+                    'train/train_cost_batch_destroyed': float(train_cost_batch_destroyed),
+                    'train/destroy_batch_avg_unassigned': float(sum(train_batch_destoyed_n_unassigned)/len(train_batch_destoyed_n_unassigned)),
                     'train/val_cost_snapshot': float(val_cost_snapshot),
+                    'train/min_costs_destroyed_batch': float(min(costs_destroyed)),
+                    'train/max_costs_destroyed_batch': float(max(costs_destroyed)),
+                    'tour_stats/average_tour_length_destroyed': float(avg_tour_length_repaired),
+                    'tour_stats/average_tour_length_repaired': float(avg_tour_length_repaired),
                     'adv/mean': float(advantage.mean()),
                     'adv/std': float(advantage.std()),
                     'adv/abs_mean': float(advantage.abs().mean()),
@@ -293,6 +336,12 @@ def train_nlns(actor, critic, run_id, config):
                     'weight_norm/actor/mean': actor_gs['agg']['weight_norm/mean'],
                     'weight_norm/critic/mean': critic_gs['agg']['weight_norm/mean'],
                 })
+                if config.problem_type == 'mdvrp':
+                    wandb.log({
+                        'tour_stats/avg_ndm_destroyed ': float(avg_ndm_destroyed),
+                        'tour_stats/avg_ndm_repaired ': float(avg_ndm_repaired),
+                    })
+                      
 
         # Evaluate and save model every 5000 batches
         if batch_idx % 5000 == 0 or batch_idx == config.nb_train_batches:

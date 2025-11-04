@@ -37,6 +37,16 @@ class VRPInstance():
         order = np.argsort(distances)
         return order[:n]
 
+    def get_n_planned_customers(self):
+        counter = 0
+        for tour in self.solution:
+            if len(tour) > 1:
+                if tour[0][0] == 0 and tour[-1][0] == 0:
+                    for node in tour:
+                        if node[0] != 0:
+                            counter += 1
+        return counter
+
     def create_initial_solution(self):
         """Create an initial solution for this instance using a greedy heuristic."""
         self.solution = [[[0, 0, 0]], [[0, 0, 0]]]

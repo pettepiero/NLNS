@@ -79,7 +79,7 @@ class VrpActorModel(nn.Module):
         super(VrpActorModel, self).__init__()
 
         self.all_embed = Encoder(4, hidden_size)
-        self.depot_embed = Encoder(4, hidden_size)
+#        self.depot_embed = Encoder(4, hidden_size)
         self.pointer = Pointer(device, hidden_size)
         self.origin_embed = Encoder(4, hidden_size)
 
@@ -101,9 +101,10 @@ class VrpActorModel(nn.Module):
         depot_features = node_features * (depot_mask).unsqueeze(2).float()
 
         cust_hidden = self.all_embed(cust_features)
-        depot_hidden = self.depot_embed(depot_features)
+#        depot_hidden = self.depot_embed(depot_features)
 
-        all_hidden = cust_hidden + depot_hidden
+#        all_hidden = cust_hidden + depot_hidden
+        all_hidden = cust_hidden
         
         # Embed inputs
         #all_hidden = self.all_embed.forward(
