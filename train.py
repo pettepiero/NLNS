@@ -213,7 +213,7 @@ def train_nlns(actor, critic, run_id, config):
             avg_ndm_destroyed = np.mean([instance.compute_ndm(perc=True) for instance in tr_instances])
         
         # debug on instance 0
-        if training_set_batch_idx == 0:
+        if training_set_batch_idx == 0 and config.wandb:
             wandb.log({
                 'single_instance/cost0': float(costs_destroyed[0]),
                 'single_instance/cost1': float(costs_destroyed[1]),
@@ -224,7 +224,7 @@ def train_nlns(actor, critic, run_id, config):
 
         train_batch_destoyed_n_unassigned = [inst.nb_customers - inst.get_n_planned_customers() for inst in tr_instances]
 
-        tour_indices, tour_logp, critic_est = repair.repair(tr_instances, actor, config, critic, rng)
+        tour_indices, tour_logp, critic_est, policy_entropy = repair.repair(tr_instances, actor, config, critic, rng)
         costs_repaired = [instance.get_costs(config.round_distances) for instance in tr_instances]
         avg_num_custs_repaired = np.mean([instance.get_n_planned_customers() for instance in tr_instances])
         avg_tour_length_repaired = np.mean(costs_repaired)/avg_num_custs_repaired
@@ -232,7 +232,7 @@ def train_nlns(actor, critic, run_id, config):
             avg_ndm_repaired = np.mean([instance.compute_ndm(perc=True) for instance in tr_instances])
 
         # debug on instance 0
-        if training_set_batch_idx == 0:
+        if training_set_batch_idx == 0 and config.wandb:
             wandb.log({
                 'single_instance/cost0': float(costs_repaired[0]),
                 'single_instance/cost1': float(costs_repaired[1]),
@@ -320,6 +320,8 @@ def train_nlns(actor, critic, run_id, config):
                     'train/val_cost_snapshot': float(val_cost_snapshot),
                     'train/min_costs_destroyed_batch': float(min(costs_destroyed)),
                     'train/max_costs_destroyed_batch': float(max(costs_destroyed)),
+                    'train/policy_entropy_mean': float(np.mean(policy_entropy.cpu().detach().numpy())),
+                    'train/policy_entropy_var': float(np.var(policy_entropy.cpu().detach().numpy())),
                     'tour_stats/average_tour_length_destroyed': float(avg_tour_length_repaired),
                     'tour_stats/average_tour_length_repaired': float(avg_tour_length_repaired),
                     'adv/mean': float(advantage.mean()),
@@ -435,3 +437,4 @@ def grad_stats(module):
         "layer_stats": layer_stats,
         "agg": agg
         }
+

@@ -96,15 +96,20 @@ class VrpActorModel(nn.Module):
         keep3 = keep.unsqueeze(2).float()
         static_input = static_input * keep3
 
+        n_depots = sum(depot_mask[0]).item() # all batch is of same blueprint
+
         node_features = torch.cat((static_input, dynamic_input_float), dim=2)
-        cust_features = node_features * (~depot_mask).unsqueeze(2).float()
-        depot_features = node_features * (depot_mask).unsqueeze(2).float()
+        #cust_features = node_features * (~depot_mask).unsqueeze(2).float()
+        cust_features = node_features[:,n_depots:,:] # will be of shape [batch_size, n_customers, 4]
+        #depot_features = node_features * (depot_mask).unsqueeze(2).float()
+        depot_features = node_features[:,:n_depots,:] # will be of shape [batch_size, n_depots, 4]
 
         cust_hidden = self.all_embed(cust_features)
         depot_hidden = self.depot_embed(depot_features)
 
-        all_hidden = cust_hidden + depot_hidden
-#        all_hidden = cust_hidden
+        #all_hidden = cust_hidden + depot_hidden
+        all_hidden = torch.cat((depot_hidden, cust_hidden), dim=1) #This might be wrong
+        #all_hidden = cust_hidden
         
         # Embed inputs
         #all_hidden = self.all_embed.forward(

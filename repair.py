@@ -46,6 +46,7 @@ def _actor_model_forward(actor, instances, static_input, dynamic_input, config, 
     tour_idx, tour_logp = [], []
     instance_repaired = np.zeros(batch_size)
     origin_idx = np.zeros((batch_size), dtype=int)
+    policy_entropy = None
 
     iter = 0
     while not instance_repaired.all():
@@ -74,7 +75,7 @@ def _actor_model_forward(actor, instances, static_input, dynamic_input, config, 
         origin_dynamic_input_float = dynamic_input_float[torch.arange(batch_size), origin_idx]
 
         # Forward pass. Returns a probability distribution over the point (tour end or depot) that origin should be connected to
-        probs = actor.forward(
+        probs, unmasked_probs = actor.forward(
                 static_input                = static_input, 
                 dynamic_input_float         = dynamic_input_float,
                 origin_static_input         = origin_static_input, 
@@ -82,6 +83,8 @@ def _actor_model_forward(actor, instances, static_input, dynamic_input, config, 
                 mask                        = mask,
                 depot_mask                  = depot_mask
                 )
+        unmasked_m = torch.distributions.Categorical(probs=unmasked_probs)
+        policy_entropy = unmasked_m.entropy()
 
         if actor.training:
             # sample actions
@@ -130,7 +133,7 @@ def _actor_model_forward(actor, instances, static_input, dynamic_input, config, 
     # END OF WHILE HERE
     tour_idx = torch.cat(tour_idx, dim=1)
     tour_logp = torch.cat(tour_logp, dim=1)
-    return tour_idx, tour_logp
+    return tour_idx, tour_logp, policy_entropy
 
 
 def _expected_dyn_for_idx(inst, dyn_input, row_i, col_j, n_depots):
@@ -187,7 +190,7 @@ def repair(instances, actor, config, critic=None, rng=None):
     cost_estimate = None
     if critic is not None:
         cost_estimate = _critic_model_forward(critic, static_input, dynamic_input, vehicle_capacity)
-    tour_idx, tour_logp = _actor_model_forward(actor, instances, static_input, dynamic_input, config, vehicle_capacity, rng)
+    tour_idx, tour_logp, policy_entropy = _actor_model_forward(actor, instances, static_input, dynamic_input, config, vehicle_capacity, rng)
 
-    return tour_idx, tour_logp, cost_estimate
+    return tour_idx, tour_logp, cost_estimate, policy_entropy
 
