@@ -49,7 +49,8 @@ def save_model_info(config):
 
 
 def train_nlns(actor, critic, run_id, config):
-    save_model_info(config)
+    #save_model_info(config)
+    #t0 = datetime.datetime.now()
     rng = np.random.default_rng(config.seed)
     batch_size = config.batch_size
 
@@ -66,6 +67,9 @@ def train_nlns(actor, critic, run_id, config):
         wandb.define_metric('tour_stats/', step_metric='batch_idx')
         wandb.define_metric('single_instance/*')
 
+    #t1 = datetime.datetime.now()
+    #logging.info(f"Time to initialize wandb: {t1 - t0}") 
+    #t0 = t1 
     if not config.load_dataset:
         logging.info("Generating training data...")
         # Create training and validation set. The initial solutions are created greedily
@@ -150,6 +154,9 @@ def train_nlns(actor, critic, run_id, config):
             with open(config.val_filepath, "rb") as f:
                 validation_instances = pickle.load(f)
 #############################################################################################àààà
+    #t1 = datetime.datetime.now()
+    #logging.info(f"Time to create/read dataset: {t1-t0}")
+    #t0 = t1
 
     if config.scale_rewards:
         # save costs of initial solutions to scale rewards later on
@@ -179,9 +186,9 @@ def train_nlns(actor, critic, run_id, config):
 
     incumbent_costs = np.inf
     start_time = datetime.datetime.now()
-
+    #logging.info(f"Time to set up before training: {start_time - t0}")
     logging.info("Starting training...")
-    
+    #t0 = start_time 
     if config.wandb:
         wandb.watch(actor, log='all', log_freq=log_f)
         wandb.log({
@@ -191,14 +198,21 @@ def train_nlns(actor, critic, run_id, config):
             'single_instance/cost3': float(training_set[3].get_costs(config.round_distances)),
             'single_instance/cost4': float(training_set[4].get_costs(config.round_distances)),
         })
+    #t1 = datetime.datetime.now()
+    #logging.info(f"Time to plot single instance initial costs: {t1-t0}")
+    #t0 = t1
     
     for batch_idx in trange(1, config.nb_train_batches + 1):
     #for batch_idx in range(1, config.nb_train_batches + 1):
         # Get a batch of training instances from the training set. Training instances are generated in advance, because
         # generating them is expensive.
+        #t0 = datetime.datetime.now()
         training_set_batch_idx = batch_idx % config.nb_batches_training_set
         tr_instances = [deepcopy(instance) for instance in
                         training_set[training_set_batch_idx * batch_size: (training_set_batch_idx + 1) * batch_size]]
+        #t1 = datetime.datetime.now()
+        #logging.info(f"Time to copy instances: {t1-t0}")
+        #t0 = t1
 
         # Destroy and repair the set of instances
         #if config.nb_batches_training_set - 1 <= batch_idx <= config.nb_batches_training_set + 2:
@@ -224,6 +238,10 @@ def train_nlns(actor, critic, run_id, config):
 
         train_batch_destoyed_n_unassigned = [inst.nb_customers - inst.get_n_planned_customers() for inst in tr_instances]
 
+        #t1 = datetime.datetime.now()
+        #logging.info(f"Time to destroy instances + stats + log single instances: {t1-t0}")
+        #t0 = t1
+
         tour_indices, tour_logp, critic_est, policy_entropy = repair.repair(tr_instances, actor, config, critic, rng)
         costs_repaired = [instance.get_costs(config.round_distances) for instance in tr_instances]
         avg_num_custs_repaired = np.mean([instance.get_n_planned_customers() for instance in tr_instances])
@@ -242,6 +260,10 @@ def train_nlns(actor, critic, run_id, config):
             })
          
         unscaled_costs_repaired = deepcopy(costs_repaired)
+
+        #t1 = datetime.datetime.now()
+        #logging.info(f"Time to repair instances + stats + log single instances: {t1-t0}")
+        #t0 = t1
             #scale costs
         #if config.scale_rewards:
         #    batch_init_costs = [deepcopy(cost) for cost in init_costs[training_set_batch_idx*batch_size: (training_set_batch_idx +1)*batch_size]]
@@ -257,6 +279,10 @@ def train_nlns(actor, critic, run_id, config):
         reward = torch.from_numpy(reward).float().to(config.device)
         advantage = reward - critic_est # per instance
 
+        #t1 = datetime.datetime.now()
+        #logging.info(f"Time to compute rewards and advantage: {t1-t0}")
+        #t0 = t1
+
         # Actor loss computation and backpropagation
         actor_loss = torch.mean(advantage.detach() * tour_logp.sum(dim=1)) # mean over batch
         actor_optim.zero_grad()
@@ -266,8 +292,21 @@ def train_nlns(actor, critic, run_id, config):
         torch.nn.utils.clip_grad_norm_(actor.parameters(), config.max_grad_norm)
         actor_total_grad_postclip = torch.nn.utils.get_total_norm(actor.parameters())
 
+        #t1 = datetime.datetime.now()
+        #logging.info(f"Time to compute actor loss, compute tensor gradient and clip actor gradient: {t1-t0}")
+        #t0 = t1
+
         actor_gs = grad_stats(actor)
+
+        #t1 = datetime.datetime.now()
+        #logging.info(f"Time to compute actor gradient stats: {t1-t0}")
+        #t0 = t1
+
         actor_optim.step()
+
+        #t1 = datetime.datetime.now()
+        #logging.info(f"Time to do actor optim step: {t1-t0}")
+        #t0 = t1
 
         # Critic loss computation and backpropagation
         critic_loss = torch.mean(advantage ** 2)
@@ -277,27 +316,59 @@ def train_nlns(actor, critic, run_id, config):
         critic_total_grad_preclip = torch.nn.utils.get_total_norm(critic.parameters())
         torch.nn.utils.clip_grad_norm_(critic.parameters(), config.max_grad_norm)
         critic_total_grad_postclip = torch.nn.utils.get_total_norm(critic.parameters())
+
+        ##t1 = datetime.datetime.now()
+        ##logging.info(f"Time to compute critic loss, compute tensor gradient and clip critic gradient: {t1-t0}")
+        ##t0 = t1
+
         critic_gs = grad_stats(critic)
+
+        #t1 = datetime.datetime.now()
+        #logging.info(f"Time to compute critic gradient stats: {t1-t0}")
+        #t0 = t1
+
         critic_optim.step()
+
+        #t1 = datetime.datetime.now()
+        #logging.info(f"Time to do critic optim step: {t1-t0}")
+        #t0 = t1
 
         rewards.append(torch.mean(reward.detach()).item()) # appending mean rewards of batch
         losses_actor.append(torch.mean(actor_loss.detach()).item())
         losses_critic.append(torch.mean(critic_loss.detach()).item())
 
+        #t1 = datetime.datetime.now()
+        #logging.info(f"Time to append rewards and losses: {t1-t0}")
+        #t0 = t1
+
         # Replace the solution of the training set instances with the new created solutions
         for i in range(batch_size):
             training_set[training_set_batch_idx * batch_size + i] = tr_instances[i]
+        
+        #t1 = datetime.datetime.now()
+        #logging.info(f"Time to replace training_set instances: {t1-t0}")
+        #t0 = t1
 
         # Log performance every log_f batches
         if batch_idx % log_f == 0 and batch_idx > 0:
+            #t0 = datetime.datetime.now()
             mean_loss = np.mean(losses_actor[-log_f:])  #avg actor loss over the last log_f batches
             mean_critic_loss = np.mean(losses_critic[-log_f:]) #avg critic loss over the last log_f batches
             mean_reward = np.mean(rewards[-log_f:]) #avg reward of last log_f batches
             # cost of this batch (multiple of log_f)
             train_cost_batch = np.mean(unscaled_costs_repaired) # mean repair cost OF THE CURRENT BATCH
             train_cost_batch_destroyed = np.mean(costs_destroyed) 
+
+            #t1 = datetime.datetime.now()
+            #logging.info(f"Time to compute stats to log: {t1-t0}")
+            #t0 = t1
+
             val_cost_snapshot = lns_validation_search(validation_instances, actor, config, rng) # mean lns cost over validation_instances
             #cost_gap = (train_cost_batch - val_cost_snapshot) / val_cost_snapshot if val_cost_snapshot != 0 else 0.0
+
+            #t1 = datetime.datetime.now()
+            #logging.info(f"Time to do val_cost_snapshot: {t1-t0}")
+            #t0 = t1
 
             logging.info(
                 f'Batch {batch_idx}/{config.nb_train_batches}, repair costs (reward): {mean_reward:2.3f}, loss: {mean_loss:2.6f} , critic_loss: {mean_critic_loss:2.6f}')
@@ -307,6 +378,10 @@ def train_nlns(actor, critic, run_id, config):
                 w = csv.writer(f)
                 #w.writerow([now, batch_idx, mean_reward, mean_loss, mean_critic_loss, train_cost_batch, val_cost_snapshot, cost_gap])
                 w.writerow([now, batch_idx, mean_reward, mean_loss, mean_critic_loss, train_cost_batch, val_cost_snapshot])
+
+            #t1 = datetime.datetime.now()
+            #logging.info(f"Time write to csv file: {t1-t0}")
+            #t0 = t1
 
             if config.wandb:
                 wandb.log({
@@ -351,6 +426,9 @@ def train_nlns(actor, critic, run_id, config):
                         'tour_stats/avg_ndm_repaired ': float(avg_ndm_repaired),
                     })
                       
+            #t1 = datetime.datetime.now()
+            #logging.info(f"Time to log everything on wandb: {t1-t0}")
+            #t0 = t1
 
         # Evaluate and save model every 5000 batches
         if batch_idx % 5000 == 0 or batch_idx == config.nb_train_batches:
