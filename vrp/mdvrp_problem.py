@@ -87,12 +87,16 @@ class MDVRPInstance():
                 
 
 
-    #def get_n_closest_locations_to(self, origin_location_id, mask, n):
-        #"""Return the idx of the n closest locations sorted by distance."""
-        #distances = np.array([np.inf] * len(mask))
+    def get_n_closest_locations_to(self, origin_location_id, mask, n):
+        """Return the idx of the n closest locations sorted by distance."""
+        idxs = np.flatnonzero(mask)                       
+        distances = np.array([np.inf] * len(mask))
         #distances[mask] = ((self.locations[mask] * self.locations[origin_location_id]) ** 2).sum(1)
-        #order = np.argsort(distances)
-        #return order[:n]
+        distances[idxs] = ((self.locations[idxs] * self.locations[origin_location_id]) ** 2).sum(1)
+        order = np.argsort(distances)
+        return order[:n]
+
+
     def __str__(self):
         return f" \
             'nb_customers': {self.nb_customers},\n \
@@ -112,24 +116,24 @@ class MDVRPInstance():
                                                     )
 
 
-    def get_n_closest_locations_to(self, origin_location_id, mask, n):
-        """Return the idx of the n closest locations (Euclidean) sorted by distance."""
-        locs = self.locations
-        idxs = np.flatnonzero(mask)                       
-        if idxs.size == 0:
-            return np.array([], dtype=int)
-    
-        origin = np.asarray(locs[origin_location_id], dtype=float)
-        locs = np.asarray(locs[idxs], dtype=float)
-        #diffs = locs[idxs] - origin
-        diffs = locs - origin
-        dists = np.linalg.norm(diffs, axis=1) 
-    
-        # Take the n smallest distances among the masked indices
-        take = min(n, idxs.size)
-        # drop 0 if inserted
-        nearest_masked_order = np.argsort(dists)[:take]   # positions within idxs
-        return idxs[nearest_masked_order]                 # original indices into self.locations
+    #def get_n_closest_locations_to(self, origin_location_id, mask, n):
+    #    """Return the idx of the n closest locations (Euclidean) sorted by distance."""
+    #    locs = self.locations
+    #    idxs = np.flatnonzero(mask)                       
+    #    if idxs.size == 0:
+    #        return np.array([], dtype=int)
+    #
+    #    origin = np.asarray(locs[origin_location_id], dtype=float)
+    #    locs = np.asarray(locs[idxs], dtype=float)
+    #    #diffs = locs[idxs] - origin
+    #    diffs = locs - origin
+    #    dists = np.linalg.norm(diffs, axis=1) 
+    #
+    #    # Take the n smallest distances among the masked indices
+    #    take = min(n, idxs.size)
+    #    # drop 0 if inserted
+    #    nearest_masked_order = np.argsort(dists)[:take]   # positions within idxs
+    #    return idxs[nearest_masked_order]                 # original indices into self.locations
     
     def get_n_planned_customers(self):
         counter = 0
@@ -483,7 +487,8 @@ class MDVRPInstance():
         # fill depots lines
         nn_input[:self.n_depots, :2] = self.locations[self.depot_indices]
         nn_input[:self.n_depots, 2] = -1 * self.capacity  # Depots demand
-        nn_input[:self.n_depots, 3] = -1  # Depots state
+        for i in range(1, self.n_depots+1):
+            nn_input[:i-1, 3] = -i  # Depots state
 
         network_input_idx_to_tour = [None] * input_size
         for d in range(self.n_depots): 
@@ -500,7 +505,7 @@ class MDVRPInstance():
             if len(tour) == 1:
                 nn_input[i, :2] = self.locations[tour[0][0]] #coordinates of customer
                 nn_input[i, 2] = tour[0][1] # demand of customer
-                nn_input[i, 3] = 1 #encoding of single customer route
+                nn_input[i, 3] = 0 #encoding of single customer route
                 tour[0][2] = i # save network input index information in incomplete_tours
                 network_input_idx_to_tour[i] = [tour, 0]
                 destroyed_location_idx.append(tour[0][0])
@@ -511,9 +516,9 @@ class MDVRPInstance():
                     nn_input[i, :2] = self.locations[tour[0][0]]
                     nn_input[i, 2] = sum(l[1] for l in tour)
                     if tour[-1][0] in self.depot_indices: # if route contains (i.e. ends at) a depot
-                        nn_input[i, 3] = 3
+                        nn_input[i, 3] = tour[-1][0] +1 
                     else:
-                        nn_input[i, 3] = 2
+                        nn_input[i, 3] = 0
                     network_input_idx_to_tour[i] = [tour, 0]
                     tour[0][2] = i # save network input index information in incomplete_tours
                     destroyed_location_idx.append(tour[0][0])
@@ -523,9 +528,9 @@ class MDVRPInstance():
                     nn_input[i, :2] = self.locations[tour[-1][0]]
                     nn_input[i, 2] = sum(l[1] for l in tour)
                     if tour[0][0] in self.depot_indices:
-                        nn_input[i, 3] = 3
+                        nn_input[i, 3] = tour[0][0] +1 
                     else:
-                        nn_input[i, 3] = 2
+                        nn_input[i, 3] = 0
                     network_input_idx_to_tour[i] = [tour, len(tour) - 1]
                     tour[-1][2] = i
                     destroyed_location_idx.append(tour[-1][0])

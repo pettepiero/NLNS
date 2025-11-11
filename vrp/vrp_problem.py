@@ -33,6 +33,8 @@ class VRPInstance():
     def get_n_closest_locations_to(self, origin_location_id, mask, n):
         """Return the idx of the n closest locations sorted by distance."""
         distances = np.array([np.inf] * len(mask))
+        #diff = self.locations[mask] - self.locations[origin_location_id]
+        #distances[mask] = (diff ** 2).sum(1)
         distances[mask] = ((self.locations[mask] * self.locations[origin_location_id]) ** 2).sum(1)
         order = np.argsort(distances)
         return order[:n]
