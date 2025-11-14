@@ -5,42 +5,42 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-#class Encoder(nn.Module):
-#    def __init__(self, input_size, hidden_size):
-#        super(Encoder, self).__init__()
-#        self.embed = nn.Linear(input_size, hidden_size)
-#        self.embed_2 = nn.Linear(hidden_size, hidden_size)
-#
-#    def forward(self, input):
-#        output = F.relu(self.embed(input))
-#        output = self.embed_2(output)
-#        return output
-
-
 class Encoder(nn.Module):
     def __init__(self, input_size, hidden_size):
-        super().__init__()
-        assert input_size >=2
-        self.input_size = input_size
-        self.last_dim = 16
-        self.main_dim = hidden_size - self.last_dim
-        #first branch
-        self.embed_main = nn.Linear(input_size-1, self.main_dim)
-        self.embed_main_2 = nn.Linear(self.main_dim, self.main_dim)
-        #second branch
-        self.embed_last = nn.Linear(1, self.last_dim)
+        super(Encoder, self).__init__()
+        self.embed = nn.Linear(input_size, hidden_size)
+        self.embed_2 = nn.Linear(hidden_size, hidden_size)
 
-    def forward(self, x):
-        x_main = x[..., : self.input_size - 1]
-        x_last = x[..., self.input_size -1 : ]
+    def forward(self, input):
+        output = F.relu(self.embed(input))
+        output = self.embed_2(output)
+        return output
 
-        h_main = F.relu(self.embed_main(x_main))
-        h_main = self.embed_main_2(h_main)
 
-        h_last = F.relu(self.embed_last(x_last))
-        out = torch.cat([h_main, h_last], dim=-1)
-
-        return out
+#class Encoder(nn.Module):
+#    def __init__(self, input_size, hidden_size):
+#        super().__init__()
+#        assert input_size >=2
+#        self.input_size = input_size
+#        self.last_dim = 16
+#        self.main_dim = hidden_size - self.last_dim
+#        #first branch
+#        self.embed_main = nn.Linear(input_size-1, self.main_dim)
+#        self.embed_main_2 = nn.Linear(self.main_dim, self.main_dim)
+#        #second branch
+#        self.embed_last = nn.Linear(1, self.last_dim)
+#
+#    def forward(self, x):
+#        x_main = x[..., : self.input_size - 1]
+#        x_last = x[..., self.input_size -1 : ]
+#
+#        h_main = F.relu(self.embed_main(x_main))
+#        h_main = self.embed_main_2(h_main)
+#
+#        h_last = F.relu(self.embed_last(x_last))
+#        out = torch.cat([h_main, h_last], dim=-1)
+#
+#        return out
 
 
 class Attention(nn.Module):

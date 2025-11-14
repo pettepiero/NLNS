@@ -529,7 +529,7 @@ class MDVRPInstance():
         nn_input[:self.n_depots, :2] = self.locations[self.depot_indices]
         nn_input[:self.n_depots, 2] = -1 * self.capacity  # Depots demand
         for i in range(1, self.n_depots+1):
-            nn_input[:i-1, 3] = -i  # Depots state
+            nn_input[:i-1, 3] = -1  # Depots state
 
         network_input_idx_to_tour = [None] * input_size
         for d in range(self.n_depots): 
@@ -546,7 +546,7 @@ class MDVRPInstance():
             if len(tour) == 1:
                 nn_input[i, :2] = self.locations[tour[0][0]] #coordinates of customer
                 nn_input[i, 2] = tour[0][1] # demand of customer
-                nn_input[i, 3] = 0 #encoding of single customer route
+                nn_input[i, 3] = 1 #encoding of single customer route
                 tour[0][2] = i # save network input index information in incomplete_tours
                 network_input_idx_to_tour[i] = [tour, 0]
                 destroyed_location_idx.append(tour[0][0])
@@ -557,9 +557,9 @@ class MDVRPInstance():
                     nn_input[i, :2] = self.locations[tour[0][0]]
                     nn_input[i, 2] = sum(l[1] for l in tour)
                     if tour[-1][0] in self.depot_indices: # if route contains (i.e. ends at) a depot
-                        nn_input[i, 3] = tour[-1][0] +1 
+                        nn_input[i, 3] = 3 
                     else:
-                        nn_input[i, 3] = 0
+                        nn_input[i, 3] = 2
                     network_input_idx_to_tour[i] = [tour, 0]
                     tour[0][2] = i # save network input index information in incomplete_tours
                     destroyed_location_idx.append(tour[0][0])
@@ -569,9 +569,9 @@ class MDVRPInstance():
                     nn_input[i, :2] = self.locations[tour[-1][0]]
                     nn_input[i, 2] = sum(l[1] for l in tour)
                     if tour[0][0] in self.depot_indices:
-                        nn_input[i, 3] = tour[0][0] +1 
+                        nn_input[i, 3] = 3
                     else:
-                        nn_input[i, 3] = 0
+                        nn_input[i, 3] = 2
                     network_input_idx_to_tour[i] = [tour, len(tour) - 1]
                     tour[-1][2] = i
                     destroyed_location_idx.append(tour[-1][0])
