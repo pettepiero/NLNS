@@ -169,6 +169,47 @@ class MDVRPInstance():
         
         return cust_to_depot 
 
+    def create_initial_solution_terrible(self, rng: np.random.Generator):
+        #fully random initial sol
+        #1 create clusters for each depot
+        depot_to_customer = {} # dict mapping depot id to list of customers in cluster
+        for depot in self.depot_indices:
+            depot_to_customer[depot] = []
+
+        custs_per_depot = int(self.nb_customers/self.n_depots)
+    
+        for idx in self.customer_indices:
+            nearest_depot = rng.integers(0, self.n_depots)
+            depot_to_customer[nearest_depot].append(idx)
+        
+        self.solution = []
+        #randomly connect customers to their depot
+        for input_idx, depot in enumerate(self.depot_indices):
+            available_customers = depot_to_customer[depot]
+            rng.shuffle(available_customers) 
+            self.solution.append([[depot, 0, input_idx]]) 
+         
+            cur_load = self.capacity
+
+            for i, cust in enumerate(available_customers): 
+                dem = int(self.demand[cust])
+                if dem <= cur_load:
+                    self.solution[-1].append([cust, dem, None])  
+                    cur_load -= dem
+                else:
+                    self.solution[-1].append([depot, 0, input_idx])
+                    self.solution.append([[depot, 0, input_idx]])
+                    self.solution[-1].append([cust, dem, None])
+                    cur_load = self.capacity - dem
+
+            if self.solution[-1][-1][0] != depot:
+                self.solution[-1].append([depot, 0, input_idx])
+
+        #check capacity constraints here
+        for tour in self.solution:
+            d = sum(l[1] for l in tour)
+            assert d <= self.capacity, f"Capacity bug in tour: {tour}"
+
     def create_initial_solution_random(self, rng: np.random.Generator):
         #1 create clusters for each depot
         depot_to_customer = {} # dict mapping depot id to list of customers in cluster

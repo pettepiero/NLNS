@@ -49,10 +49,6 @@ def create_dataset(size, config, seed=None, create_solution=False, use_cost_memo
     instances = []
     blueprints = get_blueprint(config.instance_blueprint)
 
-
-    if config.problem_type == 'mdvrp':
-        assert config.instance_blueprint in ['MD_1', 'MD_2', 'MD_3', 'MD_4', 'MD_5', 'MD_6', 'MD_7', 'MD_8'], f"instance_blueprint {config.instance_blueprint} not valid."
-
     #if seed is not None:
     #    np.random.seed(seed)
     rng = np.random.default_rng(seed)
@@ -65,7 +61,12 @@ def create_dataset(size, config, seed=None, create_solution=False, use_cost_memo
             vrp_instance = generate_Instance(blueprints, use_cost_memory, rng)
         instances.append(vrp_instance)
         if create_solution:
-            vrp_instance.create_initial_solution()
+            if config.rand_init_sol_terrible:
+                vrp_instance.create_initial_solution_terrible(rng)
+            elif config.rand_init_sol:
+                vrp_instance.create_initial_solution_random(rng)
+            else:
+                vrp_instance.create_initial_solution()
     return instances
 
 
@@ -91,8 +92,14 @@ def generate_Instance(blueprint, use_cost_memory, rng):
 
     elif blueprint.n_depots > 1: #mdvrp
         depot_positions = []
+        edges = [[0, 0], [blueprint.grid_size -1, 0], [0, blueprint.grid_size -1], [blueprint.grid_size -1, blueprint.grid_size -1]]
         for d in range(blueprint.n_depots):
-            pos = get_depot_position(blueprint, rng)
+            if blueprint.depot_position == 'R':
+                pos = get_depot_position(blueprint, rng)
+            elif blueprint.depot_position == 'E':
+                pos = edges[d%blueprint.n_depots]
+            else:
+                raise ValueError
             depot_positions.append(pos)
 
         customer_position = get_customer_position(blueprint, rng)

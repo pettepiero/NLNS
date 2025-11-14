@@ -39,4 +39,9 @@ dataset['17'] = InstanceBlueprint(nb_customers=297, depot_position='R', customer
 
 
 dataset['200'] = InstanceBlueprint(nb_customers=20, depot_position='R', customer_position='R', nb_customer_cluster=None,
-    demand_type='inter', demand_min=1, demand_max=4, capacity=6, grid_size=1000, n_depots=1)  # based on instance X 43
+    demand_type='inter', demand_min=1, demand_max=4, capacity=6, grid_size=1000, n_depots=1)  
+
+dataset['300'] = InstanceBlueprint(nb_customers=128, depot_position='R', customer_position='R', nb_customer_cluster=None,
+    demand_type='inter', demand_min=1, demand_max=3, capacity=39, grid_size=1000, n_depots=1) 
+dataset['400'] = InstanceBlueprint(nb_customers=128, depot_position='R', customer_position='R', nb_customer_cluster=None,
+    demand_type='inter', demand_min=1, demand_max=10, capacity=39, grid_size=1000, n_depots=1)  

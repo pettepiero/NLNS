@@ -10,13 +10,15 @@ import datetime
 from search_batch import lns_batch_search
 import repair
 import main
-from vrp.data_utils import create_dataset, save_dataset_pkl, read_instances_pkl, save_dataset_vrplib, read_instance_mdvrp, read_instance_vrp
+from vrp.data_utils import create_dataset, save_dataset_pkl, read_instances_pkl, save_dataset_vrplib, read_instance_mdvrp, read_instance_vrp, mdvrp_to_plot_solution
 from search import LnsOperatorPair
 from tqdm import tqdm, trange
 from pathlib import Path
 from plot.plot import plot_instance
 import pickle
 import wandb
+from pyvrp.plotting import plot_solution
+from pyvrp import read as pyvrp_read
 
 def save_model_info(config):
     filepath = "./list_trained_models.csv"
@@ -77,20 +79,41 @@ def train_nlns(actor, critic, run_id, config):
         logging.info("Generating validation data...")
         validation_instances = create_dataset(size=config.valid_size, config=config, seed=config.validation_seed, create_solution=True)
 
+        val_dataset_path, train_dataset_path = None, None
+
         if config.save_dataset:
             now_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
             if config.dataset_format == 'pkl':
                 save_dataset_pkl(training_set, f'./datasets/pkl/{now_str}_train.pkl')
                 save_dataset_pkl(validation_instances, f'./datasets/pkl/{now_str}_val.pkl')
             elif config.dataset_format == 'vrplib':
-                save_dataset_vrplib(instances=training_set, folder=f'./datasets/vrplib/{now_str}_train/', start_index=1) 
-                save_dataset_vrplib(instances=validation_instances, folder=f'./datasets/vrplib/{now_str}_val/', start_index=1) 
+                train_dataset_path = f'./datasets/vrplib/{now_str}_train/'
+                val_dataset_path = f'./datasets/vrplib/{now_str}_val/'
+                logging.info(f"Saving datasets to {train_dataset_path} and {val_dataset_path}")
+                save_dataset_vrplib(instances=training_set, folder=train_dataset_path, start_index=1) 
+                save_dataset_vrplib(instances=validation_instances, folder=val_dataset_path, start_index=1) 
             else:
+                train_dataset_path = f'./datasets/vrplib/{now_str}_train/'
+                val_dataset_path = f'./datasets/vrplib/{now_str}_val/'
                 # when in doubt, use vrplib
                 print(f"Unknown dataset_format specification: {config.dataset_format}: going to use 'vrplib'")
                 config.dataset_format = 'vrplib'
-                save_dataset_vrplib(instances=training_set, folder=f'./datasets/vrplib/{now_str}_train/', start_index=1) 
-                save_dataset_vrplib(instances=validation_instances, folder=f'./datasets/vrplib/{now_str}_val/', start_index=1) 
+                save_dataset_vrplib(instances=training_set, folder=train_dataset_path, start_index=1) 
+                save_dataset_vrplib(instances=validation_instances, folder=val_dataset_path, start_index=1) 
+                logging.info(f"Saving datasets to {train_dataset_path} and {val_dataset_path}")
+
+        # plotting initial solutions and printing costs
+        if config.plot_solution:
+            if config.problem_type == 'mdvrp':
+                sol = mdvrp_to_plot_solution(training_set[0])
+                data = pyvrp_read(f"{train_dataset_path}inst_00001.mdvrp") 
+                plot_solution(solution=sol, data=data, plot_clients=True, name='initial_sol', plot_title=f'{training_set[0].get_costs()}')
+            else:
+                sol = mdvrp_to_plot_solution(training_set[0])
+                data = pyvrp_read(f"{train_dataset_path}inst_00001.vrp") 
+                plot_solution(solution=sol, data=data, plot_clients=True, name='initial_sol', plot_title=f'{training_set[0].get_costs()}')
+
+
 #################################################################
         # reading dataset from dir or single pkl file
     else:
@@ -172,7 +195,7 @@ def train_nlns(actor, critic, run_id, config):
     log_f = config.log_f
     assert log_f < config.nb_train_batches, f"Asked to log metrics every {log_f} batches but nb_train_batches = {config.nb_train_batches}"
 
-    losses_actor, rewards, diversity_values, losses_critic = [], [], [], []
+    losses_actor, rewards, losses_critic = [], [], []
     # save csv files with losses and rewards
     metrics_dir = Path(getattr(config, "metrics_dir", Path(config.output_path) / "metrics"))
     metrics_dir.mkdir(parents=True, exist_ok=True)  

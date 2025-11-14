@@ -24,3 +24,7 @@ dataset['7'] = InstanceBlueprint(nb_customers=20, n_depots=2, depot_position='R'
 
 
 dataset['8'] = InstanceBlueprint(nb_customers=100, n_depots=4, depot_position='R', customer_position='RC', nb_customer_cluster=7, demand_type='inter', demand_min=1, demand_max=9, capacity=50, grid_size=1000)
+
+dataset['9'] = InstanceBlueprint(nb_customers=128, n_depots=2, depot_position='R', customer_position='RC', nb_customer_cluster=7, demand_type='inter', demand_min=1, demand_max=9, capacity=39, grid_size=1000)
+dataset['10'] = InstanceBlueprint(nb_customers=128, n_depots=2, depot_position='E', customer_position='RC', nb_customer_cluster=7, demand_type='inter', demand_min=1, demand_max=9, capacity=39, grid_size=1000)
+dataset['11'] = InstanceBlueprint(nb_customers=20, n_depots=2, depot_position='R', customer_position='RC', nb_customer_cluster=7, demand_type='inter', demand_min=1, demand_max=3, capacity=10, grid_size=1000)
