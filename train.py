@@ -224,7 +224,7 @@ def train_nlns(actor, critic, run_id, config):
     #t1 = datetime.datetime.now()
     #logging.info(f"Time to plot single instance initial costs: {t1-t0}")
     #t0 = t1
-    
+
     for batch_idx in trange(1, config.nb_train_batches + 1):
     #for batch_idx in range(1, config.nb_train_batches + 1):
         # Get a batch of training instances from the training set. Training instances are generated in advance, because
@@ -233,6 +233,13 @@ def train_nlns(actor, critic, run_id, config):
         training_set_batch_idx = batch_idx % config.nb_batches_training_set
         tr_instances = [deepcopy(instance) for instance in
                         training_set[training_set_batch_idx * batch_size: (training_set_batch_idx + 1) * batch_size]]
+
+        #sol = mdvrp_to_plot_solution(training_set[training_set_batch_idx*batch_size]) #first instance of training_set if training_set_batch_idx == 0
+        #data = pyvrp_read(f"{train_dataset_path}inst_00001.mdvrp") 
+        #plot_solution(solution=sol, data=data, plot_clients=True, name=f'before_destroy_{training_set_batch_idx*batch_size}_{batch_idx}', plot_title=f'{training_set[0].get_costs()}')
+
+        #print(f"DEBUG: cost of first instance before destroy: {training_set[training_set_batch_idx*batch_size].get_costs()}")
+        #print(f"DEBUG: number of routes in instance before destroy: {len(training_set[training_set_batch_idx*batch_size].solution)}")
         #t1 = datetime.datetime.now()
         #logging.info(f"Time to copy instances: {t1-t0}")
         #t0 = t1
@@ -244,10 +251,18 @@ def train_nlns(actor, critic, run_id, config):
         #    destroy_instances(rng, tr_instances, config.lns_destruction, config.lns_destruction_p, debug=False)
         destroy_instances(rng, tr_instances, config.lns_destruction, config.lns_destruction_p)
         costs_destroyed = [instance.get_costs_incomplete(config.round_distances) for instance in tr_instances]
+
+        #sol = mdvrp_to_plot_solution(tr_instances[training_set_batch_idx*batch_size]) #first instance of training_set if training_set_batch_idx == 0
+        #data = pyvrp_read(f"{train_dataset_path}inst_00001.mdvrp") 
+        #plot_solution(solution=sol, data=data, plot_clients=True, name=f'after_destroy_{training_set_batch_idx*batch_size}_{batch_idx}', plot_title=f'{tr_instances[0].get_costs_incomplete()}')
+        #print(f"DEBUG: cost of first instance after destroy: {tr_instances[training_set_batch_idx*batch_size].get_costs_incomplete()}")
+        #print(f"DEBUG: cost of first instance after destroy: {tr_instances[training_set_batch_idx*batch_size].get_costs_incomplete(True)}")
+        #print(f"DEBUG: cost of first instance after destroy according to costs_destroyed: {costs_destroyed[training_set_batch_idx*batch_size]}")
+        #print(f"DEBUG: number of routes in instance after destroy: {len(tr_instances[training_set_batch_idx*batch_size].solution)}")
+      
+
         avg_num_custs_destroyed = np.mean([instance.get_n_planned_customers() for instance in tr_instances])
         avg_tour_length_destroyed = np.mean(costs_destroyed)/avg_num_custs_destroyed
-        if config.problem_type == 'mdvrp':
-            avg_ndm_destroyed = np.mean([instance.compute_ndm(perc=True) for instance in tr_instances])
         
         # debug on instance 0
         if training_set_batch_idx == 0 and config.wandb:
@@ -311,9 +326,9 @@ def train_nlns(actor, critic, run_id, config):
         actor_optim.zero_grad()
         actor_loss.backward()
         #torch.nn.utils.clip_grad_norm_(actor.parameters(), config.max_grad_norm)
-        actor_total_grad_preclip = torch.nn.utils.get_total_norm(actor.parameters())
+        actor_total_grad_preclip = torch.nn.utils.get_total_norm([p.grad for p in actor.parameters() if p.grad is not None])
         torch.nn.utils.clip_grad_norm_(actor.parameters(), config.max_grad_norm)
-        actor_total_grad_postclip = torch.nn.utils.get_total_norm(actor.parameters())
+        actor_total_grad_postclip = torch.nn.utils.get_total_norm([p.grad for p in actor.parameters() if p.grad is not None])
 
         #t1 = datetime.datetime.now()
         #logging.info(f"Time to compute actor loss, compute tensor gradient and clip actor gradient: {t1-t0}")
@@ -324,8 +339,12 @@ def train_nlns(actor, critic, run_id, config):
         #t1 = datetime.datetime.now()
         #logging.info(f"Time to compute actor gradient stats: {t1-t0}")
         #t0 = t1
+        nde_pre = actor.get_parameter('no_depot_emb')
 
         actor_optim.step()
+
+        nde_post = actor.get_parameter('no_depot_emb')
+        nde_diff = sum(((nde_pre - nde_post)**2))
 
         #t1 = datetime.datetime.now()
         #logging.info(f"Time to do actor optim step: {t1-t0}")
@@ -336,9 +355,9 @@ def train_nlns(actor, critic, run_id, config):
         critic_optim.zero_grad()
         critic_loss.backward()
         #torch.nn.utils.clip_grad_norm_(critic.parameters(), config.max_grad_norm)
-        critic_total_grad_preclip = torch.nn.utils.get_total_norm(critic.parameters())
+        critic_total_grad_preclip = torch.nn.utils.get_total_norm([p.grad for p in critic.parameters() if p.grad is not None])
         torch.nn.utils.clip_grad_norm_(critic.parameters(), config.max_grad_norm)
-        critic_total_grad_postclip = torch.nn.utils.get_total_norm(critic.parameters())
+        critic_total_grad_postclip = torch.nn.utils.get_total_norm([p.grad for p in critic.parameters() if p.grad is not None])
 
         ##t1 = datetime.datetime.now()
         ##logging.info(f"Time to compute critic loss, compute tensor gradient and clip critic gradient: {t1-t0}")
@@ -366,7 +385,8 @@ def train_nlns(actor, critic, run_id, config):
 
         # Replace the solution of the training set instances with the new created solutions
         for i in range(batch_size):
-            training_set[training_set_batch_idx * batch_size + i] = tr_instances[i]
+            if training_set[training_set_batch_idx * batch_size + i].get_costs() > tr_instances[i].get_costs():
+                training_set[training_set_batch_idx * batch_size + i] = tr_instances[i]
         
         #t1 = datetime.datetime.now()
         #logging.info(f"Time to replace training_set instances: {t1-t0}")
@@ -386,7 +406,7 @@ def train_nlns(actor, critic, run_id, config):
             #logging.info(f"Time to compute stats to log: {t1-t0}")
             #t0 = t1
 
-            val_cost_snapshot = lns_validation_search(validation_instances, actor, config, rng) # mean lns cost over validation_instances
+            #val_cost_snapshot = lns_validation_search(validation_instances, actor, config, rng) # mean lns cost over validation_instances
             #cost_gap = (train_cost_batch - val_cost_snapshot) / val_cost_snapshot if val_cost_snapshot != 0 else 0.0
 
             #t1 = datetime.datetime.now()
@@ -396,11 +416,11 @@ def train_nlns(actor, critic, run_id, config):
             logging.info(
                 f'Batch {batch_idx}/{config.nb_train_batches}, repair costs (reward): {mean_reward:2.3f}, loss: {mean_loss:2.6f} , critic_loss: {mean_critic_loss:2.6f}')
             
-            now = datetime.datetime.now().isoformat()
-            with summary_path.open("a", newline="") as f:
-                w = csv.writer(f)
-                #w.writerow([now, batch_idx, mean_reward, mean_loss, mean_critic_loss, train_cost_batch, val_cost_snapshot, cost_gap])
-                w.writerow([now, batch_idx, mean_reward, mean_loss, mean_critic_loss, train_cost_batch, val_cost_snapshot])
+            ##now = datetime.datetime.now().isoformat()
+            ##with summary_path.open("a", newline="") as f:
+            ##    w = csv.writer(f)
+            ##    #w.writerow([now, batch_idx, mean_reward, mean_loss, mean_critic_loss, train_cost_batch, val_cost_snapshot, cost_gap])
+            ##    w.writerow([now, batch_idx, mean_reward, mean_loss, mean_critic_loss, train_cost_batch, val_cost_snapshot])
 
             #t1 = datetime.datetime.now()
             #logging.info(f"Time write to csv file: {t1-t0}")
@@ -414,12 +434,15 @@ def train_nlns(actor, critic, run_id, config):
                     'train/critic_loss': float(mean_critic_loss),
                     'train/train_cost_batch': float(train_cost_batch),
                     'train/train_cost_batch_destroyed': float(train_cost_batch_destroyed),
+                    'train/max_cost_repaired': float(max(unscaled_costs_repaired)),
+                    'train/min_cost_repaired': float(max(unscaled_costs_repaired)),
                     'train/destroy_batch_avg_unassigned': float(sum(train_batch_destoyed_n_unassigned)/len(train_batch_destoyed_n_unassigned)),
-                    'train/val_cost_snapshot': float(val_cost_snapshot),
+            #        'train/val_cost_snapshot': float(val_cost_snapshot),
                     'train/min_costs_destroyed_batch': float(min(costs_destroyed)),
                     'train/max_costs_destroyed_batch': float(max(costs_destroyed)),
                     'train/policy_entropy_mean': float(np.mean(policy_entropy.cpu().detach().numpy())),
                     'train/policy_entropy_var': float(np.var(policy_entropy.cpu().detach().numpy())),
+                    'train/nde_diff': float(nde_diff),
                     'tour_stats/average_tour_length_destroyed': float(avg_tour_length_repaired),
                     'tour_stats/average_tour_length_repaired': float(avg_tour_length_repaired),
                     'adv/mean': float(advantage.mean()),
@@ -443,11 +466,6 @@ def train_nlns(actor, critic, run_id, config):
                     'weight_norm/actor/mean': actor_gs['agg']['weight_norm/mean'],
                     'weight_norm/critic/mean': critic_gs['agg']['weight_norm/mean'],
                 })
-                if config.problem_type == 'mdvrp':
-                    wandb.log({
-                        'tour_stats/avg_ndm_destroyed ': float(avg_ndm_destroyed),
-                        'tour_stats/avg_ndm_repaired ': float(avg_ndm_repaired),
-                    })
                       
             #t1 = datetime.datetime.now()
             #logging.info(f"Time to log everything on wandb: {t1-t0}")

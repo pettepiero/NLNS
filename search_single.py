@@ -37,6 +37,7 @@ def lns_single_seach_job(args):
         # Repeat until the process is terminated
         while True:
             solution, incumbent_cost = queue_jobs.get() #block if necessary until an item is available
+            log.info(f"Process {id} | incumbent_cost = {incumbent_cost}")
             incumbent_solution = deepcopy(solution)
             cur_cost = np.inf
             instance.solution = solution
@@ -49,7 +50,7 @@ def lns_single_seach_job(args):
             iter = -1
             # Repeat until the time limit of one reheating iteration is reached
             while time.time() - start_time_reheating < config.lns_timelimit / config.lns_reheating_nb:
-                log.info(f"outer_loop_idx: {outer_loop_idx} | iter: {iter}")
+                log.info(f"Process {id} | outer_loop_idx: {outer_loop_idx} | iter: {iter}")
                 iter += 1
 
                 # Set the first config.lns_Z_param percent of the instances/solutions in the batch
@@ -72,7 +73,7 @@ def lns_single_seach_job(args):
                     destroy_procedure   = destroy_procedure,
                     destruction_p       = p_destruction
                     )
-                log.info(f"destroyed costs: {[inst.get_costs_incomplete() for inst in instance_copies[:2]]}")
+                log.info(f"Process {id} | destroyed costs: {[inst.get_costs_incomplete() for inst in instance_copies[:2]]}")
                 #save pkl of destroyed instance 0
                 #pkl_id = f"{config.output_path}/instance_{config.lns_batch_size -1}_{outer_loop_idx}_{iter}_0.pkl"
                 #with open(pkl_id, 'wb+') as f:
@@ -92,7 +93,7 @@ def lns_single_seach_job(args):
                             rng=rng,
                             )
 
-                log.info(f"repaired costs: {[inst.get_costs() for inst in instance_copies[:2]]}")
+                log.info(f"Process {id} | repaired costs: {[inst.get_costs() for inst in instance_copies[:2]]}")
 
                 #save pkl of repaired instance 0
                 #pkl_id = f"{config.output_path}/instance_{config.lns_batch_size -1}_{outer_loop_idx}_{iter}_1.pkl"
@@ -107,10 +108,13 @@ def lns_single_seach_job(args):
 
                 #compute the fraction of repairs that improve the cost
                 stats['fraction_less_cost_inc'] = sum([c < incumbent_cost for c in costs]) / len(costs)
+                stats['costs_std'] = np.array(costs).std()
+                
+                log.info(f"stats: {stats}")
 
                 # Calculate the T_max and T_factor values for simulated annealing in the first iteration
                 if iter == 0:
-                    log.info(f"iter {iter} | computing the q75 and 125 of costs")
+                    log.info(f"Process {id} | iter {iter} | computing the q75 and 125 of costs")
                     q75, q25 = np.percentile(costs, [75, 25])
                     log.info(f"q75: {q75}")
                     log.info(f"q25: {q25}")
@@ -126,28 +130,33 @@ def lns_single_seach_job(args):
                 if min_costs <= incumbent_cost:
                     incumbent_solution = deepcopy(instance_copies[np.argmin(costs)].solution)
                     incumbent_cost = min_costs
+                    log.info(f"Process {id} | Found new incumbent_cost: {incumbent_cost}")
+                else:
+                    log.info(f"Process {id} | Did not find new incumbent_cost. It remains {incumbent_cost}")
 
                 # Calculate simulated annealing temperature
                 T = T_max * math.exp(
                     T_factor * (time.time() - start_time_reheating) / (config.lns_timelimit / config.lns_reheating_nb))
 
-                log.info(f"Updated T = {T}")
+                log.info(f"Process {id} | Updated T = {T} | min(costs) = {min(costs)} | cur_cost = {cur_cost}")
+                log.info(f"Process {id} | diff = {min(costs) - cur_cost}")
+                log.info(f"Process {id} | Now the random chance is np.random.rand() < {math.exp(-(min(costs) - cur_cost) / T)}")
 
                 # Accept a solution if the acceptance criteria is fulfilled
                 if min_costs <= cur_cost or np.random.rand() < math.exp(-(min(costs) - cur_cost) / T):
-                    #log.info(f"Accepted current solution with min_costs = {min_costs} -> updating instance.solution and cur_cost")
+                    log.info(f"Process {id} | Accepted current solution with min_costs = {min_costs} -> updating instance.solution and cur_cost")
                     instance.solution = instance_copies[np.argmin(costs)].solution
                     cur_cost = min_costs
+                else:
+                    log.info(f"Process {id} | Did not accept min_costs {min_costs}")
 
 
-                log.info(f'Done acceptance test')
-                log.info(f"passed time: {time.time() - start_time_reheating}")
-                log.info(f"available time: {config.lns_timelimit / config.lns_reheating_nb}")
-                #else:
-                    #log.info(f"Not accepted current solution with min_costs = {min_costs} as new solution")
-            #log.info(f"Putting results in queue_results:")
-            #log.info([incumbent_solution, incumbent_cost])
+                log.info(f'Process {id} | Done acceptance test')
+                log.info(f"cur_cost = {cur_cost}")
+                log.info(f"Process {id} | passed time: {time.time() - start_time_reheating}")
+                log.info(f"Process {id} | available time: {config.lns_timelimit / config.lns_reheating_nb}")
 
+            log.info(f"Process {id} | Time is over. Returning incumbent_cost: {incumbent_cost}\n\n") 
             queue_results.put([incumbent_solution, incumbent_cost])
             outer_loop_idx = outer_loop_idx +1
 
@@ -169,9 +178,18 @@ def has_vehicles_line(instance_path: str) -> bool:
     return False
 
 
-def lns_single_search_mp(instance_path, timelimit, config, model_path, pkl_instance_id=None, plot_initial_sol=False, run_id=None):
+def lns_single_search_mp(instance_path, timelimit, config, model_path, pkl_instance_id=None, plot_initial_sol=False, run_id=None, init_sol='init'):
     instance = read_instance(instance_path, pkl_instance_id)
-    instance.create_initial_solution()
+    if init_sol == 'init':
+        instance.create_initial_solution()
+    elif init_sol == 'rand':
+        instance.create_initial_solution_random()
+    elif init_sol == 'terrible':
+        instance.create_initial_solution_terrible()
+    else:
+        raise ValueError
+    log.info(f"Cost of initial solution: {instance.get_costs()}")
+
     if plot_initial_sol:
         sol = mdvrp_to_plot_solution(instance)
         # if file has 'VEHICLES : INF' line
@@ -189,14 +207,13 @@ def lns_single_search_mp(instance_path, timelimit, config, model_path, pkl_insta
         else: 
             data = pyvrp_read(instance_path) 
         #plot solution
-        plot_solution(sol, data, plot_clients=True)
+        plot_solution(sol, data, name='initial_sol', plot_title=f'Initial sol, cost: {instance.get_costs(round=True)}', plot_clients=True)
         # delete temp file
         if temp_filename is not None:
             os.remove(temp_filename)
 
     dir_path = os.path.dirname(model_path)
     #plot_instance(instance, f"{dir_path}/initial_snapshot.png")
-    #incumbent_costs = instance.get_costs(config.round_distances)
     incumbent_costs = instance.get_costs(config.round_distances)
     instance.verify_solution(config)
     
@@ -237,6 +254,7 @@ def lns_single_search_mp(instance_path, timelimit, config, model_path, pkl_insta
     for el in instance.solution:
         log.info(el)
     log.info("\n")
+    log.info(f"Cost of final solution: {instance.get_costs()}")
 
     trace_path = os.path.join(dir_path, f"objective_trace_{os.path.basename(instance_path).replace(os.sep, '_')}.csv")
     print(f"Printed objective trace to: {trace_path}")

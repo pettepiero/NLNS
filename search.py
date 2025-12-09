@@ -95,7 +95,7 @@ def evaluate_batch_search(config, model_path):
     logger.info(
         f"Test set costs: {np.mean(costs):.3f} Total Runtime (s): {runtime:.1f} Iterations: {np.mean(iterations):.1f}")
 
-def evaluate_single_search(config, model_path, instance_path, run_id=None):
+def evaluate_single_search(config, model_path, instance_path, run_id=None, init_sol='init'):
     assert model_path is not None, 'No model path given'
     assert instance_path is not None, 'No instance path given'
 
@@ -126,7 +126,7 @@ def evaluate_single_search(config, model_path, instance_path, run_id=None):
     for i, instance_path in enumerate(tqdm(instance_files_path)):
         if instance_path.endswith(".pkl") or instance_path.endswith(".vrp") or instance_path.endswith(".sd") or instance_path.endswith(".mdvrp"):
             for jj in range(config.nb_runs):
-                cost, duration, final_instance = search_single.lns_single_search_mp(instance_path, config.lns_timelimit, config, model_path, i, run_id=run_id, plot_initial_sol=False)
+                cost, duration, final_instance = search_single.lns_single_search_mp(instance_path, config.lns_timelimit, config, model_path, i, run_id=run_id, plot_initial_sol=True, init_sol=init_sol)
                 instance_names.append(instance_path)
                 instance_ids.append(i)
                 costs.append(cost)
@@ -148,7 +148,7 @@ def evaluate_single_search(config, model_path, instance_path, run_id=None):
     if config.plot_solution:
         sol = mdvrp_to_plot_solution(final_instance)
         data = pyvrp_read(instance_path) 
-        plot_solution(sol, data, plot_clients=True)
+        plot_solution(sol, data, name='final_sol', plot_title=f'Final sol, cost: {final_instance.get_costs(round=True)}', plot_clients=True)
 
     #print on terminal
     tours = final_instance.solution

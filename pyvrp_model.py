@@ -39,7 +39,7 @@ def eval_single(args):
     
     _, ax = plt.subplots(figsize=(8, 8))
     plot_solution(result.best, m.data(), ax=ax)
-    plt.show()
+    #plt.show()
 
 
 def run_pyvrp_on_instance(inst: MDVRPInstance, only_cost: bool = False, display: bool = False) -> Union[float, tuple]:

@@ -169,9 +169,11 @@ class MDVRPInstance():
         
         return cust_to_depot 
 
-    def create_initial_solution_terrible(self, rng: np.random.Generator):
+    def create_initial_solution_terrible(self, rng: np.random.Generator=None):
         #fully random initial sol
         #1 create clusters for each depot
+        if rng is None:
+            rng = np.random.default_rng()
         depot_to_customer = {} # dict mapping depot id to list of customers in cluster
         for depot in self.depot_indices:
             depot_to_customer[depot] = []
@@ -183,6 +185,9 @@ class MDVRPInstance():
             depot_to_customer[nearest_depot].append(idx)
         
         self.solution = []
+        for input_idx, depot in enumerate(self.depot_indices):
+            self.solution.append([[depot, 0, input_idx]]) # for depot only
+
         #randomly connect customers to their depot
         for input_idx, depot in enumerate(self.depot_indices):
             available_customers = depot_to_customer[depot]
@@ -320,7 +325,7 @@ class MDVRPInstance():
         return ndm 
 
     def get_costs(self, round=False):
-        """Return the cost of the current complete solution. 'round' argument left for compatibility with original code"""
+        """Return the cost of the current complete solution."""
         c = 0
         for t in self.solution:
             if t[0][0] not in self.depot_indices or t[-1][0] not in self.depot_indices:
@@ -459,9 +464,6 @@ class MDVRPInstance():
             # Stop once enough tours are marked for removal
             if nb_removed_customers >= nb_customers_to_remove and len(tours_to_remove_idx) >= 1:
                 break
-        if debug:
-            log.info(f"In destroy_tour_based: removing tours indices: {tours_to_remove_idx}")
-            log.info(f"removing {len(tours_to_remove_idx)} tours out of {len(self.solution) - self.n_depots} tours (excluding depot tours)")
 
         # Create the new tours that all consist of only a single customer
         new_tours = []
@@ -529,7 +531,7 @@ class MDVRPInstance():
         nn_input[:self.n_depots, :2] = self.locations[self.depot_indices]
         nn_input[:self.n_depots, 2] = -1 * self.capacity  # Depots demand
         for i in range(1, self.n_depots+1):
-            nn_input[:i-1, 3] = -1  # Depots state
+            nn_input[i-1, 3] = -i  # Depots state
 
         network_input_idx_to_tour = [None] * input_size
         for d in range(self.n_depots): 
@@ -546,7 +548,7 @@ class MDVRPInstance():
             if len(tour) == 1:
                 nn_input[i, :2] = self.locations[tour[0][0]] #coordinates of customer
                 nn_input[i, 2] = tour[0][1] # demand of customer
-                nn_input[i, 3] = 1 #encoding of single customer route
+                nn_input[i, 3] = 0 #encoding of single customer route
                 tour[0][2] = i # save network input index information in incomplete_tours
                 network_input_idx_to_tour[i] = [tour, 0]
                 destroyed_location_idx.append(tour[0][0])
@@ -557,9 +559,9 @@ class MDVRPInstance():
                     nn_input[i, :2] = self.locations[tour[0][0]]
                     nn_input[i, 2] = sum(l[1] for l in tour)
                     if tour[-1][0] in self.depot_indices: # if route contains (i.e. ends at) a depot
-                        nn_input[i, 3] = 3 
+                        nn_input[i, 3] = tour[-1][0] +1 
                     else:
-                        nn_input[i, 3] = 2
+                        nn_input[i, 3] = 0
                     network_input_idx_to_tour[i] = [tour, 0]
                     tour[0][2] = i # save network input index information in incomplete_tours
                     destroyed_location_idx.append(tour[0][0])
@@ -569,9 +571,9 @@ class MDVRPInstance():
                     nn_input[i, :2] = self.locations[tour[-1][0]]
                     nn_input[i, 2] = sum(l[1] for l in tour)
                     if tour[0][0] in self.depot_indices:
-                        nn_input[i, 3] = 3
+                        nn_input[i, 3] = tour[0][0] +1 
                     else:
-                        nn_input[i, 3] = 2
+                        nn_input[i, 3] = 0
                     network_input_idx_to_tour[i] = [tour, len(tour) - 1]
                     tour[-1][2] = i
                     destroyed_location_idx.append(tour[-1][0])
@@ -597,27 +599,34 @@ class MDVRPInstance():
         # Tour with a single location
         if len(tour) == 1:
             if tour[0][0] not in self.depot_indices:
-                nn_input_update.append([nn_input_idx_end, new_demand, 1])
+                nn_input_update.append([nn_input_idx_end, new_demand, 0])
+                #nn_input_update.append([nn_input_idx_end, new_demand, 1])
                 self.nn_input_idx_to_tour[nn_input_idx_end] = [tour, 0]
         else:
             # Tour contains the depot
             if tour[0][0] in self.depot_indices or tour[-1][0] in self.depot_indices:
                 # First location in the tour is not the depot
                 if tour[0][0] not in self.depot_indices:
-                    nn_input_update.append([nn_input_idx_start, new_demand, 3])
+                    # then tour[-1][0] is in self.depot_indices
+                    nn_input_update.append([nn_input_idx_start, new_demand, tour[-1][0]+1])
+                    #nn_input_update.append([nn_input_idx_start, new_demand, 3])
                     # update first location
                     self.nn_input_idx_to_tour[nn_input_idx_start] = [tour, 0]
                 # Last location in the tour is not the depot
                 elif tour[-1][0] not in self.depot_indices:
-                    nn_input_update.append([nn_input_idx_end, new_demand, 3])
+                    # then tour[0][0] has to be in self.depot_indices
+                    nn_input_update.append([nn_input_idx_end, new_demand, tour[0][0]+1])
+                    #nn_input_update.append([nn_input_idx_end, new_demand, 3])
                     # update last location
                     self.nn_input_idx_to_tour[nn_input_idx_end] = [tour, len(tour) - 1]
             # Tour does not contain the depot
             else:
                 # update first and last location of the tour
-                nn_input_update.append([nn_input_idx_start, new_demand, 2])
+                nn_input_update.append([nn_input_idx_start, new_demand, 0])
+                #nn_input_update.append([nn_input_idx_start, new_demand, 2])
                 self.nn_input_idx_to_tour[nn_input_idx_start] = [tour, 0]
-                nn_input_update.append([nn_input_idx_end, new_demand, 2])
+                nn_input_update.append([nn_input_idx_end, new_demand, 0])
+                #nn_input_update.append([nn_input_idx_end, new_demand, 2])
                 self.nn_input_idx_to_tour[nn_input_idx_end] = [tour, len(tour) - 1]
         return nn_input_update
 

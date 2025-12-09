@@ -59,7 +59,6 @@ def create_dataset(size, config, seed=None, create_solution=False, use_cost_memo
             vrp_instance = generate_Instance(blueprints[blueprint_rnd_idx], use_cost_memory, rng)
         else:
             vrp_instance = generate_Instance(blueprints, use_cost_memory, rng)
-        instances.append(vrp_instance)
         if create_solution:
             if config.rand_init_sol_terrible:
                 vrp_instance.create_initial_solution_terrible(rng)
@@ -67,6 +66,7 @@ def create_dataset(size, config, seed=None, create_solution=False, use_cost_memo
                 vrp_instance.create_initial_solution_random(rng)
             else:
                 vrp_instance.create_initial_solution()
+        instances.append(vrp_instance)
     return instances
 
 

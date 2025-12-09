@@ -134,7 +134,13 @@ if __name__ == '__main__':
             raise Exception("Batch mode only supports .pkl instances files.")
         search.evaluate_batch_search(config, config.model_path)
     elif config.mode == "eval_single":
-        search.evaluate_single_search(config, config.model_path, config.instance_path, run_id = run_id)
+        if config.rand_init_sol_terrible:
+            init_sol = 'terrible'
+        elif config.rand_init_sol:
+            init_sol = 'rand'
+        else:
+            init_sol = 'init'
+        search.evaluate_single_search(config, config.model_path, config.instance_path, run_id = run_id, init_sol=init_sol)
     elif config.mode == "multi_depot":
         search.evaluate_multi_depot_search(config, config.instance_path)
     else:

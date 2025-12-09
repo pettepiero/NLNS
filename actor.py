@@ -16,33 +16,6 @@ class Encoder(nn.Module):
         output = self.embed_2(output)
         return output
 
-
-#class Encoder(nn.Module):
-#    def __init__(self, input_size, hidden_size):
-#        super().__init__()
-#        assert input_size >=2
-#        self.input_size = input_size
-#        self.last_dim = 16
-#        self.main_dim = hidden_size - self.last_dim
-#        #first branch
-#        self.embed_main = nn.Linear(input_size-1, self.main_dim)
-#        self.embed_main_2 = nn.Linear(self.main_dim, self.main_dim)
-#        #second branch
-#        self.embed_last = nn.Linear(1, self.last_dim)
-#
-#    def forward(self, x):
-#        x_main = x[..., : self.input_size - 1]
-#        x_last = x[..., self.input_size -1 : ]
-#
-#        h_main = F.relu(self.embed_main(x_main))
-#        h_main = self.embed_main_2(h_main)
-#
-#        h_last = F.relu(self.embed_last(x_last))
-#        out = torch.cat([h_main, h_last], dim=-1)
-#
-#        return out
-
-
 class Attention(nn.Module):
     def __init__(self, device, hidden_size):
         super(Attention, self).__init__()
@@ -100,14 +73,14 @@ class Pointer(nn.Module):
 
 
 class VrpActorModel(nn.Module):
-
     def __init__(self, device, hidden_size=128):
         super(VrpActorModel, self).__init__()
 
-        self.all_embed = Encoder(4, hidden_size)
-        self.depot_embed = Encoder(4, hidden_size)
-        self.pointer = Pointer(device, hidden_size)
-        self.origin_embed = Encoder(4, hidden_size)
+        self.first_encoder  = Encoder(4, int(hidden_size / 2)) 
+        self.depot_encoder  = Encoder(4, int(hidden_size / 2))
+        self.origin_embed   = Encoder(4, int(hidden_size / 2))
+        self.no_depot_emb   = torch.nn.Parameter(torch.randn(int(hidden_size / 2)))
+        self.pointer        = Pointer(device, int(hidden_size))
 
         for p in self.parameters():
             if len(p.shape) > 1:
@@ -117,33 +90,50 @@ class VrpActorModel(nn.Module):
         # Set the input feature values of already visited customers (demand == 0) to zero
         # customers are all but depots
         is_customer = ~depot_mask
-        is_active = dynamic_input_float[:, :, 1] > 0
+        is_active = dynamic_input_float[:, :, 1] >= 0
         keep = depot_mask | (is_customer & is_active)
         keep3 = keep.unsqueeze(2).float()
         static_input = static_input * keep3
-
         n_depots = sum(depot_mask[0]).item() # all batch is of same blueprint
 
         node_features = torch.cat((static_input, dynamic_input_float), dim=2)
-        #cust_features = node_features * (~depot_mask).unsqueeze(2).float()
-        cust_features = node_features[:,n_depots:,:] # will be of shape [batch_size, n_customers, 4]
-        #depot_features = node_features * (depot_mask).unsqueeze(2).float()
-        depot_features = node_features[:,:n_depots,:] # will be of shape [batch_size, n_depots, 4]
+        cust_features = node_features[:,n_depots:,:] 
+        depot_features = node_features[:,:n_depots,:] 
 
-        cust_hidden = self.all_embed(cust_features)
-        depot_hidden = self.depot_embed(depot_features)
+        all_embeddings = self.first_encoder.forward(node_features)
 
-        #all_hidden = cust_hidden + depot_hidden
-        all_hidden = torch.cat((depot_hidden, cust_hidden), dim=1) #This might be wrong
-        #all_hidden = cust_hidden
-        
-        # Embed inputs
-        #all_hidden = self.all_embed.forward(
-        #    torch.cat((static_input, dynamic_input_float), dim=2))
+        depot_ids = node_features[:,:,-1].long() 
+        depot_ids[depot_ids < 0] = -depot_ids[depot_ids < 0]
+        depot_ids = depot_ids -1 # shift to right indices
+        depot_ids[depot_ids == -1] = n_depots # no depot cases need the embedding with index n_depots
+        depot_embeddings = self.depot_encoder.forward(depot_features)
+        B, D, H = depot_embeddings.shape
+
+        nde = self.no_depot_emb.unsqueeze(0).expand(B, -1).unsqueeze(1)
+        depot_embeddings = torch.cat((depot_embeddings, nde), dim=1)
+        #cust_depot_emb = depot_embeddings[depot_ids]
+        cust_depot_emb = depot_embeddings.gather(
+            dim=1,
+            index=depot_ids.unsqueeze(-1).expand(-1, -1, H)
+            )
+
+        final_embeddings = torch.cat((all_embeddings, cust_depot_emb), dim=-1) # concat or add?
+
         origin_hidden = self.origin_embed.forward(
             torch.cat((origin_static_input.unsqueeze(1), origin_dynamic_input_float.unsqueeze(1)), dim=2))
+        origin_depot_ids = origin_dynamic_input_float[:, -1].long()
+        origin_depot_ids[origin_depot_ids < 0] = -origin_depot_ids[origin_depot_ids < 0]
+        origin_depot_ids = origin_depot_ids -1 # shift back to right indices
+        origin_depot_ids[origin_depot_ids == -1] = n_depots
+        origin_depot_ids = origin_depot_ids.unsqueeze(-1)
+        #origin_depot_embed = depot_embeddings[origin_depot_ids]
+        origin_depot_embed = depot_embeddings.gather(
+            dim=1,
+            index=origin_depot_ids.unsqueeze(-1).expand(-1, -1, H)
+            )
+        final_origin_embedding = torch.cat((origin_hidden, origin_depot_embed), dim=-1)
 
-        logits = self.pointer.forward(all_hidden.permute(0, 2, 1), origin_hidden.permute(0, 2, 1))
+        logits = self.pointer.forward(final_embeddings.permute(0, 2, 1), final_origin_embedding.permute(0, 2, 1))
 
         #masked_logits = logits.masked_fill(~mask, -1e9)
         masked_logits = torch.where(mask, logits, torch.full_like(logits, float('-inf')))

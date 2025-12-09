@@ -92,6 +92,8 @@ ap.add_argument('--lns_reheating_nb', default=5, type=int, help="Number of rehea
 ap.add_argument('--lns_Z_param', default=0.8, type=float, help="What percentage of the search focuses on generating neighbouring solution. See NLNS paper (expressed between 0 and 1)")
 ap.add_argument('--lns_nb_cpus', default=1, type=int, help="How many instances compose the search batch B in single instance search") 
 ap.add_argument('--wandb', action='store_true', help="If set, sends logs to wandb")
+ap.add_argument('--rand_init_sol', action='store_true', default=False, help="If set uses random initial solution")
+ap.add_argument('--rand_init_sol_terrible', action='store_true', default=False, help="If set uses random initial solution terrible")
 
 run_id = np.random.randint(10000, 99999)
 output_path = os.getcwd()
@@ -206,20 +208,22 @@ logging.debug(f"\n**********************************************\nCalling NLNS m
 # execute NLNS batch eval
 
 cmd_nlns = [
-    "python3",              "main.py",
-    "--mode",               "eval_single",
-    "--model_path",         full_model_path,
-    "--instance_path",      args.path,
-    "--lns_batch_size",     "1000",
-    "--lns_timelimit",      str(args.nlns_max_time_per_instance),
-    "--problem_type",       "mdvrp",
-    "--device",             args.device,
-    "--output_path",        output_path,
-    "--lns_t_max",          str(args.lns_t_max),
-    "--lns_t_min",          str(args.lns_t_min),
-    "--lns_reheating_nb",   str(args.lns_reheating_nb),
-    "--lns_Z_param",        str(args.lns_Z_param),
-    "--lns_nb_cpus",        str(args.lns_nb_cpus),
+    "python3",                  "main.py",
+    "--mode",                   "eval_single",
+    "--model_path",             full_model_path,
+    "--instance_path",          args.path,
+    "--lns_batch_size",         "1000",
+    "--lns_timelimit",          str(args.nlns_max_time_per_instance),
+    "--problem_type",           "mdvrp",
+    "--device",                 args.device,
+    "--output_path",            output_path,
+    "--lns_t_max",              str(args.lns_t_max),
+    "--lns_t_min",              str(args.lns_t_min),
+    "--lns_reheating_nb",       str(args.lns_reheating_nb),
+    "--lns_Z_param",            str(args.lns_Z_param),
+    "--lns_nb_cpus",            str(args.lns_nb_cpus),
+    "--rand_init_sol_terrible", str(args.rand_init_sol_terrible),
+    "--rand_init_sol",          str(args.rand_init_sol),
     ]
 
 logging.debug(f"NLNS command: {cmd_nlns}")

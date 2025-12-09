@@ -20,7 +20,6 @@ def lns_batch_search(instances, max_iterations, timelimit, operator_pairs, confi
 
     start_time = time.time()
     for iteration_id in range(max_iterations):
-
         if time.time() - start_time > timelimit:
             break
 
