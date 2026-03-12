@@ -75,7 +75,7 @@ class MDVRPInstance():
                 ]
 
         self.closest_depots = np.empty(self.nb_customers + self.n_depots, dtype=int)
-        for i in range(len(self.locations)):
+        for i in range(1, len(self.locations)):
             if i in self.depot_indices:
                 continue
             self.closest_depots[i] = self.get_nearest_depot(i)
@@ -92,7 +92,7 @@ class MDVRPInstance():
         idxs = np.flatnonzero(mask)                       
         distances = np.array([np.inf] * len(mask))
         #distances[mask] = ((self.locations[mask] * self.locations[origin_location_id]) ** 2).sum(1)
-        distances[idxs] = ((self.locations[idxs] * self.locations[origin_location_id]) ** 2).sum(1)
+        distances[idxs] = ((self.locations[idxs] - self.locations[origin_location_id]) ** 2).sum(1)
         order = np.argsort(distances)
         return order[:n]
 
@@ -523,7 +523,7 @@ class MDVRPInstance():
         [:, 0] x-coordinates for all points
         [:, 1] y-coordinates for all points
         [:, 2] demand values for all points
-        [:, 3] state values for all points
+        [:, 3] depot encoding (0 = no depot, i = contains depot i-1)
 
         """
         nn_input = np.zeros((input_size, 4))
@@ -559,7 +559,8 @@ class MDVRPInstance():
                     nn_input[i, :2] = self.locations[tour[0][0]]
                     nn_input[i, 2] = sum(l[1] for l in tour)
                     if tour[-1][0] in self.depot_indices: # if route contains (i.e. ends at) a depot
-                        nn_input[i, 3] = tour[-1][0] +1 
+                        #nn_input[i, 3] = tour[-1][0] +1 
+                        nn_input[i, 3] = tour[-1][0] 
                     else:
                         nn_input[i, 3] = 0
                     network_input_idx_to_tour[i] = [tour, 0]
@@ -571,7 +572,8 @@ class MDVRPInstance():
                     nn_input[i, :2] = self.locations[tour[-1][0]]
                     nn_input[i, 2] = sum(l[1] for l in tour)
                     if tour[0][0] in self.depot_indices:
-                        nn_input[i, 3] = tour[0][0] +1 
+                        #nn_input[i, 3] = tour[0][0] +1 
+                        nn_input[i, 3] = tour[0][0] 
                     else:
                         nn_input[i, 3] = 0
                     network_input_idx_to_tour[i] = [tour, len(tour) - 1]
