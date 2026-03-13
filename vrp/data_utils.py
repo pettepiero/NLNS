@@ -48,6 +48,10 @@ def get_blueprint(blueprint_name):
 def create_dataset(size, config, seed=None, create_solution=False, use_cost_memory=True):
     instances = []
     blueprints = get_blueprint(config.instance_blueprint)
+    if str(config.instance_blueprint).startswith('MD'):
+        force_md=True
+    else:
+        force_md=False
 
     #if seed is not None:
     #    np.random.seed(seed)
@@ -56,9 +60,9 @@ def create_dataset(size, config, seed=None, create_solution=False, use_cost_memo
     #for i in range(size):
         if isinstance(blueprints, list):
             blueprint_rnd_idx = rng.integers(0, len(blueprints), 1).item()
-            vrp_instance = generate_Instance(blueprints[blueprint_rnd_idx], use_cost_memory, rng)
+            vrp_instance = generate_Instance(blueprints[blueprint_rnd_idx], use_cost_memory, rng, force_md)
         else:
-            vrp_instance = generate_Instance(blueprints, use_cost_memory, rng)
+            vrp_instance = generate_Instance(blueprints, use_cost_memory, rng, force_md)
         if create_solution:
             if config.rand_init_sol_terrible:
                 vrp_instance.create_initial_solution_terrible(rng)
@@ -70,27 +74,28 @@ def create_dataset(size, config, seed=None, create_solution=False, use_cost_memo
     return instances
 
 
-def generate_Instance(blueprint, use_cost_memory, rng):
-    if blueprint.n_depots == 1:
-        depot_position = get_depot_position(blueprint, rng)
-        customer_position = get_customer_position(blueprint, rng)
-        demand = get_customer_demand(blueprint, customer_position, rng)
-        original_locations = np.insert(customer_position, 0, depot_position, axis=0)
-        demand = np.insert(demand, 0, 0, axis=0)
+def generate_Instance(blueprint, use_cost_memory, rng, force_md=False):
+    if not force_md:
+        if blueprint.n_depots == 1:
+            depot_position = get_depot_position(blueprint, rng)
+            customer_position = get_customer_position(blueprint, rng)
+            demand = get_customer_demand(blueprint, customer_position, rng)
+            original_locations = np.insert(customer_position, 0, depot_position, axis=0)
+            demand = np.insert(demand, 0, 0, axis=0)
 
-        if blueprint.grid_size == 1000:
-            locations = original_locations / 1000
-        elif blueprint.grid_size == 1000000:
-            locations = original_locations / 1000000
-        else:
-            assert blueprint.grid_size == 1, f"Problem on blueprint.grid_size #0"
-            locations = original_locations
+            if blueprint.grid_size == 1000:
+                locations = original_locations / 1000
+            elif blueprint.grid_size == 1000000:
+                locations = original_locations / 1000000
+            else:
+                assert blueprint.grid_size == 1, f"Problem on blueprint.grid_size #0"
+                locations = original_locations
 
-        vrp_instance = VRPInstance(blueprint.nb_customers, locations, original_locations, demand, blueprint.capacity,
-                                   use_cost_memory)
-        return vrp_instance
+            vrp_instance = VRPInstance(blueprint.nb_customers, locations, original_locations, demand, blueprint.capacity,
+                                       use_cost_memory)
+            return vrp_instance
 
-    elif blueprint.n_depots > 1: #mdvrp
+    if blueprint.n_depots > 1 or force_md: #mdvrp
         depot_positions = []
         edges = [[0, 0], [blueprint.grid_size -1, 0], [0, blueprint.grid_size -1], [blueprint.grid_size -1, blueprint.grid_size -1]]
         for d in range(blueprint.n_depots):
@@ -109,7 +114,7 @@ def generate_Instance(blueprint, use_cost_memory, rng):
 
         original_locations = np.array(original_locations)
 
-        demand = get_customer_demand(blueprint, customer_position, rng)
+        demand = get_customer_demand(blueprint, customer_position, rng, force_md)
         #demand = np.insert(demand, 0, 0, axis=0)
 
         if blueprint.grid_size == 1000:
@@ -212,11 +217,11 @@ def get_customer_position(blueprint, rng):
         return np.concatenate((customer_position, customer_position_2), axis=0)
 
 
-def get_customer_demand(blueprint, customer_position, rng):
+def get_customer_demand(blueprint, customer_position, rng, force_md=False):
     if blueprint.demand_type == 'inter':
-        if blueprint.n_depots == 1:
+        if blueprint.n_depots == 1 and not force_md:
             return rng.integers(blueprint.demand_min, blueprint.demand_max + 1, size=blueprint.nb_customers)
-        elif blueprint.n_depots > 1:
+        elif blueprint.n_depots > 1 or force_md:
             demands = rng.integers(blueprint.demand_min, blueprint.demand_max + 1, size=blueprint.nb_customers + blueprint.n_depots)
             depot_indices = list(range(blueprint.n_depots))
             demands[depot_indices] = 0

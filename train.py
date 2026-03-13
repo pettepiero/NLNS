@@ -249,8 +249,28 @@ def train_nlns(actor, critic, run_id, config):
         #    destroy_instances(rng, tr_instances, config.lns_destruction, config.lns_destruction_p, debug=True)
         #else:
         #    destroy_instances(rng, tr_instances, config.lns_destruction, config.lns_destruction_p, debug=False)
+
+        #print(f"DEBUG: before destroying instances. Solutions:")
+        #for i in range(2):
+        #    print(f"DEBUG: tr_instances[{i}]")
+        #    for el in tr_instances[i].solution:
+        #        print(el)
+        #    print(f"DEBUG: cost: {tr_instances[i].get_costs()}\n")        
+
+        #plot_instance(tr_instances[0], filename='./temp/init_sol_0.png')
+
         destroy_instances(rng, tr_instances, config.lns_destruction, config.lns_destruction_p)
         costs_destroyed = [instance.get_costs_incomplete(config.round_distances) for instance in tr_instances]
+
+        #debug
+        #print(f"DEBUG: just destroyed instances. Solutions:")
+        #for i in range(2):
+        #    print(f"DEBUG: tr_instances[{i}]")
+        #    for el in tr_instances[i].solution:
+        #        print(el)
+        #    print(f"DEBUG: cost: {costs_destroyed[i]}\n")
+        #    
+        #plot_instance(tr_instances[0], filename='./temp/after_destroy_sol_0.png')
 
         #sol = mdvrp_to_plot_solution(tr_instances[training_set_batch_idx*batch_size]) #first instance of training_set if training_set_batch_idx == 0
         #data = pyvrp_read(f"{train_dataset_path}inst_00001.mdvrp") 
@@ -286,6 +306,15 @@ def train_nlns(actor, critic, run_id, config):
         avg_tour_length_repaired = np.mean(costs_repaired)/avg_num_custs_repaired
         if config.problem_type == 'mdvrp':
             avg_ndm_repaired = np.mean([instance.compute_ndm(perc=True) for instance in tr_instances])
+
+        #print(f"DEBUG: after repairing instances. Solutions:")
+        #for i in range(2):
+        #    print(f"DEBUG: tr_instances[{i}]")
+        #    for el in tr_instances[i].solution:
+        #        print(el)
+        #    print(f"DEBUG: cost: {costs_repaired[i]}\n")
+
+        #plot_instance(tr_instances[0], filename='./temp/after_repair_sol_0.png')
 
         # debug on instance 0
         if training_set_batch_idx == 0 and config.wandb:
@@ -406,8 +435,8 @@ def train_nlns(actor, critic, run_id, config):
             #logging.info(f"Time to compute stats to log: {t1-t0}")
             #t0 = t1
 
-            #val_cost_snapshot = lns_validation_search(validation_instances, actor, config, rng) # mean lns cost over validation_instances
-            #cost_gap = (train_cost_batch - val_cost_snapshot) / val_cost_snapshot if val_cost_snapshot != 0 else 0.0
+            val_cost_snapshot = lns_validation_search(validation_instances, actor, config, rng) # mean lns cost over validation_instances
+            cost_gap = (train_cost_batch - val_cost_snapshot) / val_cost_snapshot if val_cost_snapshot != 0 else 0.0
 
             #t1 = datetime.datetime.now()
             #logging.info(f"Time to do val_cost_snapshot: {t1-t0}")
@@ -437,7 +466,7 @@ def train_nlns(actor, critic, run_id, config):
                     'train/max_cost_repaired': float(max(unscaled_costs_repaired)),
                     'train/min_cost_repaired': float(max(unscaled_costs_repaired)),
                     'train/destroy_batch_avg_unassigned': float(sum(train_batch_destoyed_n_unassigned)/len(train_batch_destoyed_n_unassigned)),
-            #        'train/val_cost_snapshot': float(val_cost_snapshot),
+                    'train/val_cost_snapshot': float(val_cost_snapshot),
                     'train/min_costs_destroyed_batch': float(min(costs_destroyed)),
                     'train/max_costs_destroyed_batch': float(max(costs_destroyed)),
                     'train/policy_entropy_mean': float(np.mean(policy_entropy.cpu().detach().numpy())),

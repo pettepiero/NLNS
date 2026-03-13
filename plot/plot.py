@@ -1,11 +1,10 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from vrp.mdvrp_problem import MDVRPInstance
 import os
 
 def plot_instance(vrp, filename):
     """
-    Plots the MDVRPInstance solution.
+    Plots the solution.
     - Depots as triangles
     - Customers as circles
     - Routes as lines

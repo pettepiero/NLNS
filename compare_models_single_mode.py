@@ -84,6 +84,7 @@ ap.add_argument('--max_num_instances', '-n', type=int, default=None, help="Maxim
 ap.add_argument('--nlns_model', type=str, default=None, help="NLNS model to test. Provide run number, e.g. 'run_17.9.2025_16354', or full model path if --full_model_path is set to true. See list_trained_models.csv for a list of trained NLNS models.", required=True)
 ap.add_argument('--full_model_path', default=False, action='store_true', help="Set to True if nlns_model is the full model path")
 ap.add_argument('--device', default='cuda', choices=['cuda', 'cpu'], help="Device to run on.")
+ap.add_argument('--pointer_hidden_size', default=128, help="Hidden size of pointer for NLNS model")
 
 # LNS single instance search parameters
 ap.add_argument('--lns_t_max', default=1000, type=int, help="Maximum reheating temperature for Simulated Annealing of single instance search")
@@ -105,6 +106,15 @@ os.makedirs(os.path.join(output_path, "search"))
 args = ap.parse_args()
 log_filename = os.path.join(output_path, f"log_{run_id}.txt")
 logging.basicConfig(filename=log_filename, level=logging.DEBUG)
+
+if args.wandb:
+    wandb.init(
+        project="compare_models_single_mode",
+        id=str(run_id),
+        tags=["lns_search"],
+        config=args,
+    )
+    wandb.define_metric('gap')
 
 print(f"Running compare_models_single_mode.py with run_id {run_id} and logging to wandb 'compare_models_single_mode' project.")
 print(f"Log of this execution is being written to {log_filename}")
@@ -222,6 +232,7 @@ cmd_nlns = [
     "--lns_reheating_nb",       str(args.lns_reheating_nb),
     "--lns_Z_param",            str(args.lns_Z_param),
     "--lns_nb_cpus",            str(args.lns_nb_cpus),
+    "--pointer_hidden_size",    str(args.pointer_hidden_size),
     "--rand_init_sol_terrible", str(args.rand_init_sol_terrible),
     "--rand_init_sol",          str(args.rand_init_sol),
     ]

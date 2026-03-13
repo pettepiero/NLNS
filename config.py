@@ -32,6 +32,7 @@ def get_config():
     parser.add_argument('--rand_init_sol', default=False, type=bool, help="If True, creates non greedy but random initial solutions")
     parser.add_argument('--rand_init_sol_terrible', default=False, type=bool, help="If True, creates non greedy but random and terrible initial solutions")
     parser.add_argument('--scale_rewards', default=False, action='store_true')
+    parser.add_argument('--pretrained_model_path', default=None, type=str)
 
     parser.add_argument('--dist_coeff', default=1, type=float)
     parser.add_argument('--ndm_coeff', default=0.3, type=float)

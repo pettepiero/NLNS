@@ -140,3 +140,7 @@ class VrpActorModel(nn.Module):
         probs = F.softmax(masked_logits, dim=1)
         unmasked_probs = F.softmax(logits, dim=1)
         return probs, unmasked_probs
+
+
+def load_actor_model(model_path, config):
+    lns_operators = search.load_operator_pairs(model_path, config)

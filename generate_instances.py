@@ -30,6 +30,7 @@ def write_mdvrplib(filename, config, name="problem", convention='mine'):
     demands = np.where(demands == 0, 1, demands).astype(float)
     shifted_depot_indices = [el -1 for el in depot_indices]
     demands[shifted_depot_indices] = 0.0
+    demands = demands.clip(min=0, max=blueprint.demand_max) 
     demands = demands.tolist()
 
     with open(filename, 'w+') as f:

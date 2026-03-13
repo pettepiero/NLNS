@@ -11,7 +11,7 @@ import time
 import math
 import search
 import queue as pyqueue
-#from plot.plot import plot_instance
+from plot.plot import plot_instance
 import os
 import csv
 import logging
@@ -95,6 +95,7 @@ def lns_single_seach_job(args):
 
                 log.info(f"Process {id} | repaired costs: {[inst.get_costs() for inst in instance_copies[:2]]}")
 
+                plot_instance(instance_copies[0], filename=f"temp/instance_filename_{iter}")
                 #save pkl of repaired instance 0
                 #pkl_id = f"{config.output_path}/instance_{config.lns_batch_size -1}_{outer_loop_idx}_{iter}_1.pkl"
                 #with open(pkl_id, 'wb+') as f:
@@ -270,6 +271,8 @@ def lns_single_search_mp(instance_path, timelimit, config, model_path, pkl_insta
         w.writerow(["time_sec", "incumbent_cost"])
         w.writerows(objective_trace)
     log.info(f"Printed objective trace to: {copy_of_trace_path}")
+
+    plot_instance(instance, filename=f"./temp/final_sol_single_mode.png")
 
     # plot final instance 
     #plot_path = f"{dir_path}/final_snapshot.png"

@@ -111,6 +111,15 @@ if __name__ == '__main__':
                 raise ValueError('Error in config.train_filepath')
 
         actor = VrpActorModel(config.device, hidden_size=config.pointer_hidden_size).to(config.device)
+
+        if config.pretrained_model_path is not None:
+            assert os.path.exists(config.pretrained_model_path)
+            model_data = torch.load(config.pretrained_model_path, config.device)
+            actor.load_state_dict(model_data['parameters'])
+            actor.train()
+            log.info(f"Loading pretrained model {config.pretrained_model_path}")
+
+
         critic = VrpCriticModel(config.critic_hidden_size).to(config.device)
 
         model_path = train.train_nlns(actor, critic, run_id, config)

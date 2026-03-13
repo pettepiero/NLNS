@@ -66,6 +66,7 @@ ap.add_argument('--max_num_instances', '-n', type=int, default=None, help="Maxim
 ap.add_argument('--nlns_model', type=str, default=None, help="NLNS model to test. Provide run number, e.g. 'run_17.9.2025_16354', or full model path if --full_model_path is set to true. See list_trained_models.csv for a list of trained NLNS models.", required=True)
 ap.add_argument('--full_model_path', default=False, action='store_true', help="Set to True if nlns_model is the full model path")
 ap.add_argument('--device', default='cuda', choices=['cuda', 'cpu'], help="Device to run on.")
+ap.add_argument('--pointer_hidden_size', default=128, help="Hidden size of pointer for NLNS model")
 
 args = ap.parse_args()
 logging.info(f"DEBUG: args: {vars(args)}")
@@ -110,6 +111,7 @@ cmd_nlns = [
     "--problem_type",   "mdvrp",
     "--device",         args.device,
     "--output_path",    output_path,
+    "--pointer_hidden_size",    str(args.pointer_hidden_size),
     ]
 
 subprocess.run(cmd_nlns, check=True)

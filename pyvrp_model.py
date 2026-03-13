@@ -38,7 +38,7 @@ def eval_single(args):
         plot_solution(result.best, m.data())
     
     _, ax = plt.subplots(figsize=(8, 8))
-    plot_solution(result.best, m.data(), ax=ax)
+    plot_solution(result.best, m.data(), ax=ax, name="pyvrp_final_sol")
     #plt.show()
 
 
